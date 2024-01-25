@@ -1,4 +1,4 @@
-# agi_loam
+# agi_lidar_slam
 **A repo. which used to check LiDAR-based Odometry and Mapping.**
 
 ## pkgs
