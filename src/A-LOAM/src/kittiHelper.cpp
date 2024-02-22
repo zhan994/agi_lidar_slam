@@ -25,11 +25,12 @@
 std::vector<float> read_lidar_data(const std::string lidar_data_path)
 {
   std::ifstream lidar_data_file(lidar_data_path, std::ifstream::in | std::ifstream::binary);
-  lidar_data_file.seekg(0, std::ios::end);
-  const size_t num_elements = lidar_data_file.tellg() / sizeof(float);
-  lidar_data_file.seekg(0, std::ios::beg);
+  lidar_data_file.seekg(0, std::ios::end);                             // 文件指针指向文件末尾
+  const size_t num_elements = lidar_data_file.tellg() / sizeof(float); // 统计一下文件有多少float数据
+  lidar_data_file.seekg(0, std::ios::beg);                             // 再把指针指向文件开始
 
   std::vector<float> lidar_data_buffer(num_elements);
+  // 读取所有的数据
   lidar_data_file.read(reinterpret_cast<char *>(&lidar_data_buffer[0]), num_elements * sizeof(float));
   return lidar_data_buffer;
 }
@@ -83,54 +84,60 @@ int main(int argc, char **argv)
   std::size_t line_num = 0;
 
   ros::Rate r(10.0 / publish_delay);
+  // 遍历时间戳这个文本文件
+  std::cout << "timestamp_file " << std::string(dataset_folder + timestamp_path) << std::endl;
   while (std::getline(timestamp_file, line) && ros::ok())
   {
+    // 把string转成浮点型float
     float             timestamp = stof(line);
     std::stringstream left_image_path, right_image_path;
+    // 找到对应的左右目的图片
     left_image_path << dataset_folder << "sequences/" + sequence_number + "/image_0/" << std::setfill('0')
                     << std::setw(6) << line_num << ".png";
-    cv::Mat left_image = cv::imread(left_image_path.str(), 0);
+    cv::Mat left_image = cv::imread(left_image_path.str(), CV_LOAD_IMAGE_GRAYSCALE);
     right_image_path << dataset_folder << "sequences/" + sequence_number + "/image_1/" << std::setfill('0')
                      << std::setw(6) << line_num << ".png";
-    cv::Mat right_image = cv::imread(left_image_path.str(), 0);
+    cv::Mat right_image = cv::imread(left_image_path.str(), CV_LOAD_IMAGE_GRAYSCALE);
+    // 得到ground truth的文件
+    // std::getline(ground_truth_file, line);
+    // std::stringstream pose_stream(line);
+    // std::string s;
+    // Eigen::Matrix<double, 3, 4> gt_pose;
+    // // 得到这个变换矩阵T
+    // for (std::size_t i = 0; i < 3; ++i)
+    // {
+    //     for (std::size_t j = 0; j < 4; ++j)
+    //     {
+    //         std::getline(pose_stream, s, ' ');
+    //         gt_pose(i, j) = stof(s);
+    //     }
+    // }
+    // // 相机坐标系转到前左上的坐标系
+    // Eigen::Quaterniond q_w_i(gt_pose.topLeftCorner<3, 3>());
+    // Eigen::Quaterniond q = q_transform * q_w_i;
+    // q.normalize();
+    // Eigen::Vector3d t = q_transform * gt_pose.topRightCorner<3, 1>();
+    // // 发布topic和path
+    // odomGT.header.stamp = ros::Time().fromSec(timestamp);
+    // odomGT.pose.pose.orientation.x = q.x();
+    // odomGT.pose.pose.orientation.y = q.y();
+    // odomGT.pose.pose.orientation.z = q.z();
+    // odomGT.pose.pose.orientation.w = q.w();
+    // odomGT.pose.pose.position.x = t(0);
+    // odomGT.pose.pose.position.y = t(1);
+    // odomGT.pose.pose.position.z = t(2);
+    // pubOdomGT.publish(odomGT);
 
-    std::getline(ground_truth_file, line);
-    std::stringstream           pose_stream(line);
-    std::string                 s;
-    Eigen::Matrix<double, 3, 4> gt_pose;
-    for (std::size_t i = 0; i < 3; ++i)
-    {
-      for (std::size_t j = 0; j < 4; ++j)
-      {
-        std::getline(pose_stream, s, ' ');
-        gt_pose(i, j) = stof(s);
-      }
-    }
-
-    Eigen::Quaterniond q_w_i(gt_pose.topLeftCorner<3, 3>());
-    Eigen::Quaterniond q = q_transform * q_w_i;
-    q.normalize();
-    Eigen::Vector3d t = q_transform * gt_pose.topRightCorner<3, 1>();
-
-    odomGT.header.stamp            = ros::Time().fromSec(timestamp);
-    odomGT.pose.pose.orientation.x = q.x();
-    odomGT.pose.pose.orientation.y = q.y();
-    odomGT.pose.pose.orientation.z = q.z();
-    odomGT.pose.pose.orientation.w = q.w();
-    odomGT.pose.pose.position.x    = t(0);
-    odomGT.pose.pose.position.y    = t(1);
-    odomGT.pose.pose.position.z    = t(2);
-    pubOdomGT.publish(odomGT);
-
-    geometry_msgs::PoseStamped poseGT;
-    poseGT.header       = odomGT.header;
-    poseGT.pose         = odomGT.pose.pose;
-    pathGT.header.stamp = odomGT.header.stamp;
-    pathGT.poses.push_back(poseGT);
-    pubPathGT.publish(pathGT);
+    // geometry_msgs::PoseStamped poseGT;
+    // poseGT.header = odomGT.header;
+    // poseGT.pose = odomGT.pose.pose;
+    // pathGT.header.stamp = odomGT.header.stamp;
+    // pathGT.poses.push_back(poseGT);
+    // pubPathGT.publish(pathGT);
 
     // read lidar point cloud
     std::stringstream lidar_data_path;
+    // 获取lidar数据的文件名
     lidar_data_path << dataset_folder << "velodyne/sequences/" + sequence_number + "/velodyne/" << std::setfill('0')
                     << std::setw(6) << line_num << ".bin";
     std::vector<float> lidar_data = read_lidar_data(lidar_data_path.str());
@@ -139,11 +146,12 @@ int main(int argc, char **argv)
     std::vector<Eigen::Vector3d>    lidar_points;
     std::vector<float>              lidar_intensities;
     pcl::PointCloud<pcl::PointXYZI> laser_cloud;
+    // 每个点数据占四个float数据，分别是xyz，intensity
     for (std::size_t i = 0; i < lidar_data.size(); i += 4)
     {
       lidar_points.emplace_back(lidar_data[i], lidar_data[i + 1], lidar_data[i + 2]);
       lidar_intensities.push_back(lidar_data[i + 3]);
-
+      // 构建pcl的点云格式
       pcl::PointXYZI point;
       point.x         = lidar_data[i];
       point.y         = lidar_data[i + 1];
@@ -151,19 +159,20 @@ int main(int argc, char **argv)
       point.intensity = lidar_data[i + 3];
       laser_cloud.push_back(point);
     }
-
+    // 转成ros的消息格式
     sensor_msgs::PointCloud2 laser_cloud_msg;
     pcl::toROSMsg(laser_cloud, laser_cloud_msg);
     laser_cloud_msg.header.stamp    = ros::Time().fromSec(timestamp);
     laser_cloud_msg.header.frame_id = "/camera_init";
+    // 发布点云数据
     pub_laser_cloud.publish(laser_cloud_msg);
-
+    // 图片也转成ros的消息发布出去
     sensor_msgs::ImagePtr image_left_msg = cv_bridge::CvImage(laser_cloud_msg.header, "mono8", left_image).toImageMsg();
     sensor_msgs::ImagePtr image_right_msg =
         cv_bridge::CvImage(laser_cloud_msg.header, "mono8", right_image).toImageMsg();
     pub_image_left.publish(image_left_msg);
     pub_image_right.publish(image_right_msg);
-
+    // 也可以写到rosbag包中去
     if (to_bag)
     {
       bag_out.write("/image_left", ros::Time::now(), image_left_msg);
