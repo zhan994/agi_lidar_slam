@@ -1,4 +1,5 @@
-// This is an advanced implementation of the algorithm described in the following paper:
+// This is an advanced implementation of the algorithm described in the
+// following paper:
 //   J. Zhang and S. Singh. LOAM: Lidar Odometry and Mapping in Real-time.
 //     Robotics: Science and Systems Conference (RSS). Berkeley, CA, July 2014.
 
@@ -41,12 +42,6 @@
 
 typedef pcl::PointXYZI PointType;
 
-inline double rad2deg(double radians)
-{
-  return radians * 180.0 / M_PI;
-}
+inline double rad2deg(double radians) { return radians * 180.0 / M_PI; }
 
-inline double deg2rad(double degrees)
-{
-  return degrees * M_PI / 180.0;
-}
+inline double deg2rad(double degrees) { return degrees * M_PI / 180.0; }
