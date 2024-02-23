@@ -31,15 +31,18 @@ struct LidarEdgeFactor {
     // q[2]};
     Eigen::Quaternion<T> q_last_curr{q[3], q[0], q[1], q[2]};
     Eigen::Quaternion<T> q_identity{T(1), T(0), T(0), T(0)};
+
+    // note: 位姿插值，去畸变
     // 计算的是上一帧到当前帧的位姿变换，因此根据匀速模型，计算该点对应的位姿
     // 这里暂时不考虑畸变，因此这里不做任何变换
     q_last_curr = q_identity.slerp(T(s), q_last_curr);
     Eigen::Matrix<T, 3, 1> t_last_curr{T(s) * t[0], T(s) * t[1], T(s) * t[2]};
 
+    // step: 把当前点根据当前计算的帧间位姿变换到上一帧
     Eigen::Matrix<T, 3, 1> lp;
-    // 把当前点根据当前计算的帧间位姿变换到上一帧
     lp = q_last_curr * cp + t_last_curr;
 
+    // step: 点到直线距离 = 三角形面积 / 底边长度
     Eigen::Matrix<T, 3, 1> nu = (lp - lpa).cross(lp - lpb);  // 模是三角形的面积
     Eigen::Matrix<T, 3, 1> de = lpa - lpb;
     // 残差的模是该点到底边的垂线长度
@@ -97,9 +100,10 @@ struct LidarPlaneFactor {
     q_last_curr = q_identity.slerp(T(s), q_last_curr);
     Eigen::Matrix<T, 3, 1> t_last_curr{T(s) * t[0], T(s) * t[1], T(s) * t[2]};
 
+    // step: 把当前点根据当前计算的帧间位姿变换到上一帧
     Eigen::Matrix<T, 3, 1> lp;
     lp = q_last_curr * cp + t_last_curr;
-    // 点到平面的距离
+    // step: 点到平面的距离 = 向量在平面法向量上的投影
     residual[0] = (lp - lpj).dot(ljm);
 
     return true;
