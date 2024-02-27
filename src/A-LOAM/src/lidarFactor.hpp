@@ -138,9 +138,11 @@ struct LidarPlaneNormFactor {
     Eigen::Matrix<T, 3, 1> t_w_curr{t[0], t[1], t[2]};
     Eigen::Matrix<T, 3, 1> cp{T(curr_point.x()), T(curr_point.y()),
                               T(curr_point.z())};
+    // step: 转到世界坐标系
     Eigen::Matrix<T, 3, 1> point_w;
     point_w = q_w_curr * cp + t_w_curr;
 
+    // step: 计算点到平面距离
     Eigen::Matrix<T, 3, 1> norm(T(plane_unit_norm.x()), T(plane_unit_norm.y()),
                                 T(plane_unit_norm.z()));
     residual[0] =

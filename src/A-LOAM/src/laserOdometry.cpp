@@ -325,8 +325,7 @@ int main(int argc, char** argv) {
           for (int i = 0; i < cornerPointsSharpNum; ++i) {
             // 运动补偿
             TransformToStart(&(cornerPointsSharp->points[i]), &pointSel);
-            // step: 3.1.1
-            // 在上一帧所有角点构成的kdtree中寻找距离当前帧最近的一个点
+            // step: 3.1.1 在上一帧所有角点的kdtree中寻找距离当前帧最近的一个点
             kdtreeCornerLast->nearestKSearch(pointSel, 1, pointSearchInd,
                                              pointSearchSqDis);
 
@@ -341,9 +340,8 @@ int main(int argc, char** argv) {
 
               double minPointSqDis2 = DISTANCE_SQ_THRESHOLD;
               // search in the direction of increasing scan line
-              // step: 3.1.2
-              // 寻找另一个角点，在刚刚角点id上下分别继续寻找，目的是找到最近的角点
-              // 由于其按照线束进行排序，所以就是向上找
+              // step: 3.1.2 寻找另一个角点，在刚刚角点id上下分别继续寻找
+              // 目的是找到最近的角点，由于其按照线束进行排序，所以就是向上找
               for (int j = closestPointInd + 1;
                    j < (int)laserCloudCornerLast->points.size(); ++j) {
                 // if in the same scan line, continue
@@ -523,8 +521,7 @@ int main(int argc, char** argv) {
                   minPointInd3 = j;
                 }
               }
-              // step: 3.2.3
-              // 如果另外找到的两个点是有效点，就取出他们的3d坐标，构建点面约束
+              // step: 3.2.3 如果另外找到的两个点是有效点，取3d坐标构建约束
               if (minPointInd2 >= 0 && minPointInd3 >= 0) {
                 Eigen::Vector3d curr_point(surfPointsFlat->points[i].x,
                                            surfPointsFlat->points[i].y,
