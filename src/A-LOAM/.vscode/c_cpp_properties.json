@@ -6,10 +6,9 @@
         "limitSymbolsToIncludedHeaders": false
       },
       "includePath": [
-        "${workspaceFolder}/src/A-LOAM/include/**",
-        "${workspaceFolder}/src/LeGO-LOAM/LeGO-LOAM/include/**",
-        "${workspaceFolder}/devel/include/**",
+        "/home/zhan/Workspace/github/agi_lidar_slam/devel/include/**",
         "/opt/ros/noetic/include/**",
+        "/home/zhan/Workspace/github/agi_lidar_slam/src/A-LOAM/include/**",
         "/usr/include/**"
       ],
       "name": "ROS",
