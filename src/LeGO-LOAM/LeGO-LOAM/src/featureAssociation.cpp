@@ -875,6 +875,7 @@ class FeatureAssociation {
     }
   }
 
+  // api: 特征提取
   void extractFeatures() {
     cornerPointsSharp->clear();
     cornerPointsLessSharp->clear();
@@ -949,7 +950,7 @@ class FeatureAssociation {
         int smallestPickedNum = 0;
         for (int k = sp; k <= ep; k++) {
           int ind = cloudSmoothness[k].ind;
-          // 平面点只从地面点中进行选择? 为什么要这样做?
+          // note: 平面点只从地面点中进行选择
           if (cloudNeighborPicked[ind] == 0 &&
               cloudCurvature[ind] < surfThreshold &&
               segInfo.segmentedCloudGroundFlag[ind] == true) {
@@ -1283,13 +1284,16 @@ class FeatureAssociation {
 
   double deg2rad(double degrees) { return degrees * M_PI / 180.0; }
 
+  // api: 角点对应点搜索
   void findCorrespondingCornerFeatures(int iterCount) {
     int cornerPointsSharpNum = cornerPointsSharp->points.size();
 
     for (int i = 0; i < cornerPointsSharpNum; i++) {
+      // step: 1 坐标变换到开始时刻，参数0是输入，参数1是输出
       TransformToStart(&cornerPointsSharp->points[i], &pointSel);
 
       if (iterCount % 5 == 0) {
+        // step: 2 k点最近邻搜索，这里k=1
         kdtreeCornerLast->nearestKSearch(pointSel, 1, pointSearchInd,
                                          pointSearchSqDis);
         int closestPointInd = -1, minPointInd2 = -1;
@@ -1299,6 +1303,7 @@ class FeatureAssociation {
           int closestPointScan =
               int(laserCloudCornerLast->points[closestPointInd].intensity);
 
+          // step: 3 主要是找到2个scan之内的最近点，并将找到的最近点及其序号保存
           float pointSqDis, minPointSqDis2 = nearestFeatureSearchSqDist;
           for (int j = closestPointInd + 1; j < cornerPointsSharpNum; j++) {
             if (int(laserCloudCornerLast->points[j].intensity) >
@@ -1348,6 +1353,7 @@ class FeatureAssociation {
         pointSearchCornerInd2[i] = minPointInd2;
       }
 
+      // step: 4 对应角点都找到，构建约束
       if (pointSearchCornerInd2[i] >= 0) {
         tripod1 = laserCloudCornerLast->points[pointSearchCornerInd1[i]];
         tripod2 = laserCloudCornerLast->points[pointSearchCornerInd2[i]];
@@ -1397,15 +1403,16 @@ class FeatureAssociation {
     }
   }
 
+  // api: 地面点对应点搜索
   void findCorrespondingSurfFeatures(int iterCount) {
     int surfPointsFlatNum = surfPointsFlat->points.size();
 
     for (int i = 0; i < surfPointsFlatNum; i++) {
-      // 坐标变换到开始时刻，参数0是输入，参数1是输出
+      // step: 1 坐标变换到开始时刻，参数0是输入，参数1是输出
       TransformToStart(&surfPointsFlat->points[i], &pointSel);
 
       if (iterCount % 5 == 0) {
-        // k点最近邻搜索，这里k=1
+        // step: 2 k点最近邻搜索，这里k=1
         kdtreeSurfLast->nearestKSearch(pointSel, 1, pointSearchInd,
                                        pointSearchSqDis);
         int closestPointInd = -1, minPointInd2 = -1, minPointInd3 = -1;
@@ -1422,7 +1429,7 @@ class FeatureAssociation {
           int closestPointScan =
               int(laserCloudSurfLast->points[closestPointInd].intensity);
 
-          // 主要功能是找到2个scan之内的最近点，并将找到的最近点及其序号保存
+          // step: 3 主要是找到2个scan之内的最近点，找到的最近点及其序号保存
           // 之前扫描的保存到minPointSqDis2，之后的保存到minPointSqDis2
           float pointSqDis, minPointSqDis2 = nearestFeatureSearchSqDist,
                             minPointSqDis3 = nearestFeatureSearchSqDist;
@@ -1441,6 +1448,7 @@ class FeatureAssociation {
                          (laserCloudSurfLast->points[j].z - pointSel.z) *
                              (laserCloudSurfLast->points[j].z - pointSel.z);
 
+            // note: 其中1个点与近邻点同一个线数，另一个不同线数
             if (int(laserCloudSurfLast->points[j].intensity) <=
                 closestPointScan) {
               if (pointSqDis < minPointSqDis2) {
@@ -1489,7 +1497,7 @@ class FeatureAssociation {
         pointSearchSurfInd3[i] = minPointInd3;
       }
 
-      // 前后都能找到对应的最近点在给定范围之内
+      // step: 4 前后都能找到对应的最近点在给定范围之内，构建约束
       // 那么就开始计算距离
       // [pa,pb,pc]是tripod1，tripod2，tripod3这3个点构成的一个平面的方向量，
       // ps是模长，它是三角形面积的2倍
@@ -1543,6 +1551,7 @@ class FeatureAssociation {
     }
   }
 
+  // api: 面点约束优化
   bool calculateTransformationSurf(int iterCount) {
     int pointSelNum = laserCloudOri->points.size();
 
@@ -1668,6 +1677,7 @@ class FeatureAssociation {
     return true;
   }
 
+  // api: 角点约束优化
   bool calculateTransformationCorner(int iterCount) {
     int pointSelNum = laserCloudOri->points.size();
 
@@ -1995,6 +2005,7 @@ class FeatureAssociation {
     }
   }
 
+  // api: 2步优化估计6自由度位姿
   void updateTransformation() {
     if (laserCloudCornerLastNum < 10 || laserCloudSurfLastNum < 100) return;
 
@@ -2002,13 +2013,13 @@ class FeatureAssociation {
       laserCloudOri->clear();
       coeffSel->clear();
 
-      // 找到对应的特征平面
+      // step: 1 找到对应的特征平面
       // 然后计算协方差矩阵，保存在coeffSel队列中
       // laserCloudOri中保存的是对应于coeffSel的未转换到开始时刻的原始点云数据
       findCorrespondingSurfFeatures(iterCount1);
 
       if (laserCloudOri->points.size() < 10) continue;
-      // 通过面特征的匹配，计算变换矩阵
+      // step: 2 通过面特征的匹配，计算变换矩阵
       if (calculateTransformationSurf(iterCount1) == false) break;
     }
 
@@ -2016,12 +2027,12 @@ class FeatureAssociation {
       laserCloudOri->clear();
       coeffSel->clear();
 
-      // 找到对应的特征边/角点
+      // step: 3 找到对应的特征边/角点
       // 寻找边特征的方法和寻找平面特征的很类似，过程可以参照寻找平面特征的注释
       findCorrespondingCornerFeatures(iterCount2);
 
       if (laserCloudOri->points.size() < 10) continue;
-      // 通过角/边特征的匹配，计算变换矩阵
+      // step: 4 通过角/边特征的匹配，计算变换矩阵
       if (calculateTransformationCorner(iterCount2) == false) break;
     }
   }
@@ -2199,7 +2210,7 @@ class FeatureAssociation {
     // 预测位姿
     updateInitialGuess();
 
-    // 更新变换
+    // 2步优化更新变换
     updateTransformation();
 
     // 积分总变换

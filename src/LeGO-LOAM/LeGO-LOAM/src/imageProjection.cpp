@@ -126,8 +126,7 @@ class ImageProjection {
     segMsg.segmentedCloudColInd.assign(N_SCAN * Horizon_SCAN, 0);
     segMsg.segmentedCloudRange.assign(N_SCAN * Horizon_SCAN, 0);
 
-    // labelComponents函数中用到了这个矩阵
-    // 该矩阵用于求某个点的上下左右4个邻接点
+    // labelComponents函数中用到了这个矩阵，该矩阵用于求某个点的上下左右4个邻接点
     std::pair<int8_t, int8_t> neighbor;
     neighbor.first = -1;
     neighbor.second = 0;
@@ -285,17 +284,19 @@ class ImageProjection {
     }
   }
 
+  // api: 地面点分离
   void groundRemoval() {
     size_t lowerInd, upperInd;
     float diffX, diffY, diffZ, angle;
 
+    // step: 1 按列遍历，即按线数
     for (size_t j = 0; j < Horizon_SCAN; ++j) {
-      // groundScanInd 是在 utility.h 文件中声明的线数，groundScanInd=7
+      // note: groundScanInd声明的线数不超过水平线，groundScanInd=7
       for (size_t i = 0; i < groundScanInd; ++i) {
         lowerInd = j + (i)*Horizon_SCAN;
         upperInd = j + (i + 1) * Horizon_SCAN;
 
-        // 初始化的时候用nanPoint.intensity = -1 填充
+        // step: 2 初始化的时候用nanPoint.intensity = -1 填充
         // 都是-1 证明是空点nanPoint
         if (fullCloud->points[lowerInd].intensity == -1 ||
             fullCloud->points[upperInd].intensity == -1) {
@@ -303,15 +304,14 @@ class ImageProjection {
           continue;
         }
 
+        // step: 3 计算俯仰角，判断是否为地面，标记为1
         // 由上下两线之间点的XYZ位置得到两线之间的俯仰角
         // 如果俯仰角在10度以内，则判定(i,j)为地面点,groundMat[i][j]=1
         // 否则，则不是地面点，进行后续操作
         diffX = fullCloud->points[upperInd].x - fullCloud->points[lowerInd].x;
         diffY = fullCloud->points[upperInd].y - fullCloud->points[lowerInd].y;
         diffZ = fullCloud->points[upperInd].z - fullCloud->points[lowerInd].z;
-
         angle = atan2(diffZ, sqrt(diffX * diffX + diffY * diffY)) * 180 / M_PI;
-
         if (abs(angle - sensorMountAngle) <= 10) {
           groundMat.at<int8_t>(i, j) = 1;
           groundMat.at<int8_t>(i + 1, j) = 1;
@@ -321,6 +321,7 @@ class ImageProjection {
 
     // 找到所有点中的地面点或者距离为FLT_MAX(rangeMat的初始值)的点，并将他们标记为-1
     // rangeMat[i][j]==FLT_MAX，代表的含义是什么？ 无效点
+    // step: 4 标记地面点和无效点，后续不参加特征提取
     for (size_t i = 0; i < N_SCAN; ++i) {
       for (size_t j = 0; j < Horizon_SCAN; ++j) {
         if (groundMat.at<int8_t>(i, j) == 1 ||
@@ -330,6 +331,7 @@ class ImageProjection {
       }
     }
 
+    // step: 5 发布地面点
     // 如果有节点订阅groundCloud，那么就需要把地面点发布出来
     // 具体实现过程：把点放到groundCloud队列中去
     if (pubGroundCloud.getNumSubscribers() != 0) {
@@ -342,11 +344,11 @@ class ImageProjection {
     }
   }
 
+  // api: 点云分类
   void cloudSegmentation() {
     for (size_t i = 0; i < N_SCAN; ++i)
       for (size_t j = 0; j < Horizon_SCAN; ++j)
-        // 如果labelMat[i][j]=0,表示没有对该点进行过分类
-        // 需要对该点进行聚类
+        // step: 1 labelMat[i][j]=0表示没有对该点进行过分类，需要对该点进行聚类
         if (labelMat.at<int>(i, j) == 0) labelComponents(i, j);
 
     int sizeOfSegCloud = 0;
@@ -357,10 +359,11 @@ class ImageProjection {
       // 以开始线后的第6线为开始，以结束线前的第6线为结束
       segMsg.startRingIndex[i] = sizeOfSegCloud - 1 + 5;
 
+      // step: 2 取出有效点和外点
       for (size_t j = 0; j < Horizon_SCAN; ++j) {
-        // 找到可用的特征点或者地面点(不选择labelMat[i][j]=0的点)
+        // note: 找到可用的特征点或者地面点，不选择labelMat[i][j]<=0的点
         if (labelMat.at<int>(i, j) > 0 || groundMat.at<int8_t>(i, j) == 1) {
-          // labelMat数值为999999表示这个点是因为聚类数量不够30而被舍弃的点
+          // step: 2.1 labelMat数值为999999表示这个点是因为聚类数量不够30而被舍弃的点
           // 需要舍弃的点直接continue跳过本次循环，
           // 当列数为5的倍数，并且行数较大，可以认为非地面点的，将它保存进异常点云(界外点云)中
           // 然后再跳过本次循环
@@ -373,7 +376,7 @@ class ImageProjection {
             }
           }
 
-          // 如果是地面点,对于列数不为5的倍数的，直接跳过不处理
+          // step: 2.2 地面点对于列数不为5的倍数的降采样
           if (groundMat.at<int8_t>(i, j) == 1) {
             if (j % 5 != 0 && j > 5 && j < Horizon_SCAN - 5) continue;
           }
@@ -392,6 +395,7 @@ class ImageProjection {
       segMsg.endRingIndex[i] = sizeOfSegCloud - 1 - 5;
     }
 
+    // step: 3 发布分类好的点云，intensity表示分类标签
     // 如果有节点订阅SegmentedCloudPure,
     // 那么把点云数据保存到segmentedCloudPure中去
     if (pubSegmentedCloudPure.getNumSubscribers() != 0) {
@@ -409,11 +413,14 @@ class ImageProjection {
     }
   }
 
+  // api: BFS聚类
   void labelComponents(int row, int col) {
+    // std::queue资源消耗较大，使用数组和双指针实现
     float d1, d2, alpha, angle;
     int fromIndX, fromIndY, thisIndX, thisIndY;
     bool lineCountFlag[N_SCAN] = {false};
 
+    // step: 1 初始化BFS
     queueIndX[0] = row;
     queueIndY[0] = col;
     int queueSize = 1;
@@ -428,6 +435,7 @@ class ImageProjection {
     // BFS的作用是以(row，col)为中心向外面扩散，
     // 判断(row,col)是否是这个平面中一点
     while (queueSize > 0) {
+      // step: 2 取出访问的点
       fromIndX = queueIndX[queueStartInd];
       fromIndY = queueIndY[queueStartInd];
       --queueSize;
@@ -436,21 +444,22 @@ class ImageProjection {
       labelMat.at<int>(fromIndX, fromIndY) = labelCount;
 
       // neighbor=[[-1,0];[0,1];[0,-1];[1,0]]
-      // 遍历点[fromIndX,fromIndY]边上的四个邻点
+      // step: 3 遍历点[fromIndX,fromIndY]边上的四个邻点
       for (auto iter = neighborIterator.begin(); iter != neighborIterator.end();
            ++iter) {
         thisIndX = fromIndX + (*iter).first;
         thisIndY = fromIndY + (*iter).second;
 
+        // step: 3.1 线数越界不处理
         if (thisIndX < 0 || thisIndX >= N_SCAN) continue;
 
-        // 是个环状的图片，左右连通
+        // step: 3.2 水平扫描是个环状的图片，左右连通
         if (thisIndY < 0) thisIndY = Horizon_SCAN - 1;
         if (thisIndY >= Horizon_SCAN) thisIndY = 0;
 
         // 如果点[thisIndX,thisIndY]已经标记过
         // labelMat中，-1代表无效点，0代表未进行标记过，其余为其他的标记
-        // 如果当前的邻点已经标记过，则跳过该点。
+        // step: 3.3 如果当前的邻点已经标记过，则跳过该点。
         // 如果labelMat已经标记为正整数，则已经聚类完成，不需要再次对该点聚类
         if (labelMat.at<int>(thisIndX, thisIndY) != 0) continue;
 
@@ -459,6 +468,7 @@ class ImageProjection {
         d2 = std::min(rangeMat.at<float>(fromIndX, fromIndY),
                       rangeMat.at<float>(thisIndX, thisIndY));
 
+        // step: 3.4 计算判断距离的角度，并判断是否为同一类，同一类加入队列中
         // alpha代表角度分辨率，
         // X方向上角度分辨率是segmentAlphaX(rad)
         // Y方向上角度分辨率是segmentAlphaY(rad)
@@ -489,8 +499,8 @@ class ImageProjection {
       }
     }
 
+    // step: 4 检查聚类有效性
     bool feasibleSegment = false;
-
     // 如果聚类超过30个点，直接标记为一个可用聚类，labelCount需要递增
     if (allPushedIndSize >= 30)
       feasibleSegment = true;
@@ -504,6 +514,7 @@ class ImageProjection {
       if (lineCount >= segmentValidLineNum) feasibleSegment = true;
     }
 
+    // step: 5 处理分类序号标签
     if (feasibleSegment == true) {
       ++labelCount;
     } else {
