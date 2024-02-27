@@ -140,7 +140,6 @@ void TransformToStart(PointType const* const pi, PointType* const po) {
 }
 
 // transform all lidar points to the start of the next frame
-
 void TransformToEnd(PointType const* const pi, PointType* const po) {
   // undistort point first
   pcl::PointXYZI un_point_tmp;
@@ -193,6 +192,7 @@ void laserCloudFullResHandler(
   mBuf.unlock();
 }
 
+// api: 主函数
 int main(int argc, char** argv) {
   ros::init(argc, argv, "laserOdometry");
   ros::NodeHandle nh;

@@ -109,7 +109,7 @@ void removeClosedPointCloud(const pcl::PointCloud<PointT>& cloud_in,
   cloud_out.is_dense = true;
 }
 
-// note: 主要的回调，订阅lidar消息
+// api: 主要的回调，订阅lidar消息
 void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg) {
   // 如果系统没有初始化的话，就等几帧
   if (!systemInited) {
