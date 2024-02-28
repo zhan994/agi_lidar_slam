@@ -261,6 +261,7 @@ class ParamServer {
     usleep(100);
   }
 
+  // api: IMU数据转换
   sensor_msgs::Imu imuConverter(const sensor_msgs::Imu& imu_in) {
     sensor_msgs::Imu imu_out = imu_in;
     // 这里把imu的数据旋转到前左上坐标系下，可以参考https://github.com/TixiaoShan/LIO-SAM/issues/6

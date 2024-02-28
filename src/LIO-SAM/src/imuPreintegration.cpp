@@ -292,7 +292,7 @@ class IMUPreintegration : public ParamServer {
     systemInitialized = false;
   }
 
-  // 订阅地图优化节点的增量里程记消息
+  // api: 订阅地图优化节点的增量里程记消息
   void odometryHandler(const nav_msgs::Odometry::ConstPtr& odomMsg) {
     std::lock_guard<std::mutex> lock(mtx);
 
@@ -539,6 +539,7 @@ class IMUPreintegration : public ParamServer {
     doneFirstOpt = true;
   }
 
+  // api: 状态失效检测
   bool failureDetection(const gtsam::Vector3& velCur,
                         const gtsam::imuBias::ConstantBias& biasCur) {
     Eigen::Vector3f vel(velCur.x(), velCur.y(), velCur.z());
