@@ -4,4 +4,5 @@
 ## pkgs
 
 - A-LOAM: https://github.com/HKUST-Aerial-Robotics/A-LOAM
-- 
+- LeGO-LOAM: https://github.com/RobustFieldAutonomyLab/LeGO-LOAM
+- LIO-SAM: https://github.com/TixiaoShan/LIO-SAM
