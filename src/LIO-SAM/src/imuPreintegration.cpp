@@ -20,6 +20,7 @@ using gtsam::symbol_shorthand::B;  // Bias  (ax,ay,az,gx,gy,gz)
 using gtsam::symbol_shorthand::V;  // Vel   (xdot,ydot,zdot)
 using gtsam::symbol_shorthand::X;  // Pose3 (x,y,z,r,p,y)
 
+// 位姿融合，将预积分后半部分预测的位姿变化补偿到回环约束优化后的关键帧位姿
 class TransformFusion : public ParamServer {
  public:
   std::mutex mtx;
@@ -169,6 +170,7 @@ class TransformFusion : public ParamServer {
   }
 };
 
+// 预积分，因子图优化零偏和位姿
 class IMUPreintegration : public ParamServer {
  public:
   std::mutex mtx;
