@@ -273,6 +273,7 @@ class mapOptimization : public ParamServer {
     matP = cv::Mat(6, 6, CV_32F, cv::Scalar::all(0));
   }
 
+  // api: 点云数据回调
   void laserCloudInfoHandler(const lio_sam::cloud_infoConstPtr& msgIn) {
     // extract time stamp
     // 提取当前时间戳
@@ -906,6 +907,7 @@ class mapOptimization : public ParamServer {
     pubLoopConstraintEdge.publish(markerArray);
   }
 
+  // api: 更新初值
   // 作为基于优化方式的点云匹配，初始值是非常重要的，一个好的初始值会帮助优化问题快速收敛且避免局部最优解的情况
   void updateInitialGuess() {
     // save current transformation before any processing
