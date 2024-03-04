@@ -265,7 +265,7 @@ class ParamServer {
   sensor_msgs::Imu imuConverter(const sensor_msgs::Imu& imu_in) {
     sensor_msgs::Imu imu_out = imu_in;
     // 这里把imu的数据旋转到前左上坐标系下，可以参考https://github.com/TixiaoShan/LIO-SAM/issues/6
-    // rotate acceleration
+    // step: 1 rotate acceleration
     Eigen::Vector3d acc(imu_in.linear_acceleration.x,
                         imu_in.linear_acceleration.y,
                         imu_in.linear_acceleration.z);
@@ -273,14 +273,16 @@ class ParamServer {
     imu_out.linear_acceleration.x = acc.x();
     imu_out.linear_acceleration.y = acc.y();
     imu_out.linear_acceleration.z = acc.z();
-    // rotate gyroscope
+
+    // step: 2 rotate gyroscope
     Eigen::Vector3d gyr(imu_in.angular_velocity.x, imu_in.angular_velocity.y,
                         imu_in.angular_velocity.z);
     gyr = extRot * gyr;
     imu_out.angular_velocity.x = gyr.x();
     imu_out.angular_velocity.y = gyr.y();
     imu_out.angular_velocity.z = gyr.z();
-    // rotate roll pitch yaw
+    
+    // step: 3 rotate roll pitch yaw
     // 这是一个九轴imu，因此还会有姿态信息
     Eigen::Quaterniond q_from(imu_in.orientation.w, imu_in.orientation.x,
                               imu_in.orientation.y, imu_in.orientation.z);
@@ -289,7 +291,8 @@ class ParamServer {
     imu_out.orientation.y = q_final.y();
     imu_out.orientation.z = q_final.z();
     imu_out.orientation.w = q_final.w();
-    // 简单校验一下结果
+    
+    // step: 4 简单校验一下结果
     if (sqrt(q_final.x() * q_final.x() + q_final.y() * q_final.y() +
              q_final.z() * q_final.z() + q_final.w() * q_final.w()) < 0.1) {
       ROS_ERROR("Invalid quaternion, please use a 9-axis IMU!");
@@ -300,6 +303,7 @@ class ParamServer {
   }
 };
 
+// api: 发布点云
 sensor_msgs::PointCloud2 publishCloud(ros::Publisher* thisPub,
                                       pcl::PointCloud<PointType>::Ptr thisCloud,
                                       ros::Time thisStamp,
@@ -312,11 +316,13 @@ sensor_msgs::PointCloud2 publishCloud(ros::Publisher* thisPub,
   return tempCloud;
 }
 
+// api: 取ROS消息的时间戳
 template <typename T>
 double ROS_TIME(T msg) {
   return msg->header.stamp.toSec();
 }
 
+// api: 取ROS消息的IMU角速度
 template <typename T>
 void imuAngular2rosAngular(sensor_msgs::Imu* thisImuMsg, T* angular_x,
                            T* angular_y, T* angular_z) {
