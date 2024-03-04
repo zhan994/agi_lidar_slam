@@ -1165,26 +1165,27 @@ class mapOptimization : public ParamServer {
     updatePointAssociateToMap();
 // 使用openmp并行加速
 #pragma omp parallel for num_threads(numberOfCores)
-    // 遍历当前帧的角点
+    // step: 2 遍历当前帧的角点
     for (int i = 0; i < laserCloudCornerLastDSNum; i++) {
       PointType pointOri, pointSel, coeff;
       std::vector<int> pointSearchInd;
       std::vector<float> pointSearchSqDis;
 
+      // step: 2.1 将该点从当前帧通过初始的位姿转换到地图坐标系下去
       pointOri = laserCloudCornerLastDS->points[i];
-      // 将该点从当前帧通过初始的位姿转换到地图坐标系下去
-      (&pointOri, &pointSel);
-      // 在角点地图里寻找距离当前点比较近的5个点
+      pointAssociateToMap(&pointOri, &pointSel);
+
+      // step: 2.2 在角点地图里寻找距离当前点比较近的5个点
       kdtreeCornerFromMap->nearestKSearch(pointSel, 5, pointSearchInd,
                                           pointSearchSqDis);
 
       cv::Mat matA1(3, 3, CV_32F, cv::Scalar::all(0));
       cv::Mat matD1(1, 3, CV_32F, cv::Scalar::all(0));
       cv::Mat matV1(3, 3, CV_32F, cv::Scalar::all(0));
-      // 计算找到的点中距离当前点最远的点，如果距离太大那说明这个约束不可信，就跳过
+      // step: 2.3 找到的点中距离当前点最远的点不能距离太大
       if (pointSearchSqDis[4] < 1.0) {
         float cx = 0, cy = 0, cz = 0;
-        // 计算协方差矩阵
+        // step: 2.4 计算协方差矩阵
         // 首先计算均值
         for (int j = 0; j < 5; j++) {
           cx += laserCloudCornerFromMapDS->points[pointSearchInd[j]].x;
@@ -1194,7 +1195,6 @@ class mapOptimization : public ParamServer {
         cx /= 5;
         cy /= 5;
         cz /= 5;
-
         float a11 = 0, a12 = 0, a13 = 0, a22 = 0, a23 = 0, a33 = 0;
         for (int j = 0; j < 5; j++) {
           float ax =
@@ -1217,7 +1217,6 @@ class mapOptimization : public ParamServer {
         a22 /= 5;
         a23 /= 5;
         a33 /= 5;
-
         matA1.at<float>(0, 0) = a11;
         matA1.at<float>(0, 1) = a12;
         matA1.at<float>(0, 2) = a13;
@@ -1227,22 +1226,24 @@ class mapOptimization : public ParamServer {
         matA1.at<float>(2, 0) = a13;
         matA1.at<float>(2, 1) = a23;
         matA1.at<float>(2, 2) = a33;
-        // 特征值分解
+
+        // step: 2.5 特征值分解，线特征性要求最大特征值大于3倍的次大特征值
         cv::eigen(matA1, matD1, matV1);
-        // 这是线特征性，要求最大特征值大于3倍的次大特征值
         if (matD1.at<float>(0, 0) > 3 * matD1.at<float>(0, 1)) {
           float x0 = pointSel.x;
           float y0 = pointSel.y;
           float z0 = pointSel.z;
-          // 特征向量对应的就是直线的方向向量
-          // 通过点的均值往两边拓展，构成一个线的两个端点
+          // note: 最大特征值对应的特征向量对应的就是直线的方向向量
+          // step: 2.6 通过点的均值往两边拓展，构成一个线的两个端点
           float x1 = cx + 0.1 * matV1.at<float>(0, 0);
           float y1 = cy + 0.1 * matV1.at<float>(0, 1);
           float z1 = cz + 0.1 * matV1.at<float>(0, 2);
           float x2 = cx - 0.1 * matV1.at<float>(0, 0);
           float y2 = cy - 0.1 * matV1.at<float>(0, 1);
           float z2 = cz - 0.1 * matV1.at<float>(0, 2);
-          // 下面是计算点到线的残差和垂线方向（及雅克比方向）
+
+          // step: 2.7 下面是计算点到线的残差和垂线方向（及雅克比方向）
+          // |oa × ob|
           float a012 =
               sqrt(((x0 - x1) * (y0 - y2) - (x0 - x2) * (y0 - y1)) *
                        ((x0 - x1) * (y0 - y2) - (x0 - x2) * (y0 - y1)) +
@@ -1251,9 +1252,11 @@ class mapOptimization : public ParamServer {
                    ((y0 - y1) * (z0 - z2) - (y0 - y2) * (z0 - z1)) *
                        ((y0 - y1) * (z0 - z2) - (y0 - y2) * (z0 - z1)));
 
+          // |ba|
           float l12 = sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2) +
                            (z1 - z2) * (z1 - z2));
 
+          // ba × (oa × ob) 为垂线方向单位向量 (la,lb,lc)
           float la =
               ((y1 - y2) * ((x0 - x1) * (y0 - y2) - (x0 - x2) * (y0 - y1)) +
                (z1 - z2) * ((x0 - x1) * (z0 - z2) - (x0 - x2) * (z0 - z1))) /
@@ -1269,10 +1272,10 @@ class mapOptimization : public ParamServer {
                 (y1 - y2) * ((y0 - y1) * (z0 - z2) - (y0 - y2) * (z0 - z1))) /
               a012 / l12;
 
+          // 点到直线的距离即残差
           float ld2 = a012 / l12;
           // 一个简单的核函数，残差越大权重降低
           float s = 1 - 0.9 * fabs(ld2);
-
           coeff.x = s * la;
           coeff.y = s * lb;
           coeff.z = s * lc;
@@ -1288,15 +1291,18 @@ class mapOptimization : public ParamServer {
     }
   }
 
+  // api: 面点优化
   void surfOptimization() {
+    // step: 1 求点到地图作弊系的变换Eigen
     updatePointAssociateToMap();
 
 #pragma omp parallel for num_threads(numberOfCores)
+    // step: 2 遍历当前帧的角点
     for (int i = 0; i < laserCloudSurfLastDSNum; i++) {
       PointType pointOri, pointSel, coeff;
       std::vector<int> pointSearchInd;
       std::vector<float> pointSearchSqDis;
-      // 同样找5个面点
+      // step: 2.1 同样找5个面点
       pointOri = laserCloudSurfLastDS->points[i];
       pointAssociateToMap(&pointOri, &pointSel);
       kdtreeSurfFromMap->nearestKSearch(pointSel, 5, pointSearchInd,
@@ -1305,35 +1311,33 @@ class mapOptimization : public ParamServer {
       Eigen::Matrix<float, 5, 3> matA0;
       Eigen::Matrix<float, 5, 1> matB0;
       Eigen::Vector3f matX0;
-      // 平面方程Ax + By + Cz + 1 = 0
+      // step: 2.2 平面方程Ax + By + Cz + 1 = 0
       matA0.setZero();
       matB0.fill(-1);
       matX0.setZero();
-      // 同样最大距离不能超过1m
+      // step: 2.3 找到的点中距离当前点最远的点不能距离太大
       if (pointSearchSqDis[4] < 1.0) {
         for (int j = 0; j < 5; j++) {
           matA0(j, 0) = laserCloudSurfFromMapDS->points[pointSearchInd[j]].x;
           matA0(j, 1) = laserCloudSurfFromMapDS->points[pointSearchInd[j]].y;
           matA0(j, 2) = laserCloudSurfFromMapDS->points[pointSearchInd[j]].z;
         }
-        // 求解Ax = b这个超定方程
+        // step: 2.4 求解Ax = b这个超定方程，求出来x的就是这个平面的法向量
         matX0 = matA0.colPivHouseholderQr().solve(matB0);
-        // 求出来x的就是这个平面的法向量
         float pa = matX0(0, 0);
         float pb = matX0(1, 0);
         float pc = matX0(2, 0);
         float pd = 1;
-
+        // note: 归一化，将法向量模长统一为1
         float ps = sqrt(pa * pa + pb * pb + pc * pc);
-        // 归一化，将法向量模长统一为1
         pa /= ps;
         pb /= ps;
         pc /= ps;
         pd /= ps;
 
+        // step: 2.5 每个点计算点到平面的距离，距离大于0.2m就是无效的平面
         bool planeValid = true;
         for (int j = 0; j < 5; j++) {
-          // 每个点代入平面方程，计算点到平面的距离，如果距离大于0.2m认为这个平面曲率偏大，就是无效的平面
           if (fabs(pa * laserCloudSurfFromMapDS->points[pointSearchInd[j]].x +
                    pb * laserCloudSurfFromMapDS->points[pointSearchInd[j]].y +
                    pc * laserCloudSurfFromMapDS->points[pointSearchInd[j]].z +
@@ -1342,9 +1346,9 @@ class mapOptimization : public ParamServer {
             break;
           }
         }
-        // 如果通过了平面的校验
+
+        // step: 2.6 如果通过了平面的校验计算当前点到平面的距离
         if (planeValid) {
-          // 计算当前点到平面的距离
           float pd2 = pa * pointSel.x + pb * pointSel.y + pc * pointSel.z + pd;
           // 分母不是很明白，为了更多的面点用起来？
           float s = 1 - 0.9 * fabs(pd2) /
@@ -1367,9 +1371,9 @@ class mapOptimization : public ParamServer {
     }
   }
 
-  // 将角点约束和面点约束统一到一起
+  // api: 将角点约束和面点约束统一到一起
   void combineOptimizationCoeffs() {
-    // combine corner coeffs
+    // step: 1 combine corner coeffs
     for (int i = 0; i < laserCloudCornerLastDSNum; ++i) {
       // 只有标志位为true的时候才是有效约束
       if (laserCloudOriCornerFlag[i] == true) {
@@ -1377,32 +1381,35 @@ class mapOptimization : public ParamServer {
         coeffSel->push_back(coeffSelCornerVec[i]);
       }
     }
-    // combine surf coeffs
+    // step: 2 combine surf coeffs
     for (int i = 0; i < laserCloudSurfLastDSNum; ++i) {
       if (laserCloudOriSurfFlag[i] == true) {
         laserCloudOri->push_back(laserCloudOriSurfVec[i]);
         coeffSel->push_back(coeffSelSurfVec[i]);
       }
     }
-    // reset flag for next iteration
-    // 标志位清零
+
+    // step: 3 标志位清零为了下一次迭代
     std::fill(laserCloudOriCornerFlag.begin(), laserCloudOriCornerFlag.end(),
               false);
     std::fill(laserCloudOriSurfFlag.begin(), laserCloudOriSurfFlag.end(),
               false);
   }
 
+  // api: GN优化
   bool LMOptimization(int iterCount) {
-    // 原始的loam代码是将lidar坐标系转到相机坐标系，这里把原先loam中的代码拷贝了过来，但是为了坐标系的统一，就先转到相机系优化，然后结果转回lidar系
-    // This optimization is from the original loam_velodyne by Ji Zhang, need to
-    // cope with coordinate transformation lidar <- camera      ---     camera
-    // <- lidar x = z                ---     x = y y = x                --- y =
-    // z z = y                ---     z = x roll = yaw           ---     roll =
-    // pitch pitch = roll         ---     pitch = yaw yaw = pitch          ---
-    // yaw = roll
+    // note: 原始的loam代码是将lidar坐标系转到相机坐标系
+    // note: 这里把拷贝了loam中的代码，先转到相机系优化，然后转回lidar系
+    // lidar <- camera      ---     camera<- lidar
+    // x = z                ---     x = y
+    // y = x                ---     y =z
+    // z = y                ---     z = x
+    // roll = yaw           ---     roll = pitch
+    // pitch = roll         ---     pitch = yaw
+    // yaw = pitch          ---     yaw = roll
 
     // lidar -> camera
-    // 将lidar系转到相机系
+    // step: 1 将lidar系转到相机系
     float srx = sin(transformTobeMapped[1]);
     float crx = cos(transformTobeMapped[1]);
     float sry = sin(transformTobeMapped[2]);
@@ -1410,6 +1417,7 @@ class mapOptimization : public ParamServer {
     float srz = sin(transformTobeMapped[0]);
     float crz = cos(transformTobeMapped[0]);
 
+    // step: 2 检查点数
     int laserCloudSelNum = laserCloudOri->size();
     if (laserCloudSelNum < 50) {
       return false;
@@ -1424,8 +1432,9 @@ class mapOptimization : public ParamServer {
 
     PointType pointOri, coeff;
 
+    // step: 3 计算雅克比
     for (int i = 0; i < laserCloudSelNum; i++) {
-      // 首先将当前点以及点到线（面）的单位向量转到相机系
+      // step: 3.1 首先将当前点以及点到线（面）的单位向量转到相机系
       // lidar -> camera
       pointOri.x = laserCloudOri->points[i].y;
       pointOri.y = laserCloudOri->points[i].z;
@@ -1435,8 +1444,9 @@ class mapOptimization : public ParamServer {
       coeff.y = coeffSel->points[i].z;
       coeff.z = coeffSel->points[i].x;
       coeff.intensity = coeffSel->points[i].intensity;
-      // in camera
-      // 相机系下的旋转顺序是Y - X - Z对应lidar系下Z -Y -X
+
+      // step: 3.2 相机系下计算雅克比
+      // note: 相机系旋转顺序是Y - X - Z对应lidar系下Z -Y -X
       float arx = (crx * sry * srz * pointOri.x + crx * crz * sry * pointOri.y -
                    srx * sry * pointOri.z) *
                       coeff.x +
@@ -1463,8 +1473,9 @@ class mapOptimization : public ParamServer {
                   ((sry * srz + cry * crz * srx) * pointOri.x +
                    (crz * sry - cry * srx * srz) * pointOri.y) *
                       coeff.z;
+
+      // step: 3.3 这里雅克比把camera转到lidar
       // lidar -> camera
-      // 这里就是把camera转到lidar了
       matA.at<float>(i, 0) = arz;
       matA.at<float>(i, 1) = arx;
       matA.at<float>(i, 2) = ary;
@@ -1473,15 +1484,15 @@ class mapOptimization : public ParamServer {
       matA.at<float>(i, 5) = coeff.y;
       matB.at<float>(i, 0) = -coeff.intensity;
     }
-    // 构造JTJ以及-JTe矩阵
+
+    // step: 4 构造JTJ以及-JTe矩阵，求解增量
     cv::transpose(matA, matAt);
     matAtA = matAt * matA;
     matAtB = matAt * matB;
-    // 求解增量
     cv::solve(matAtA, matAtB, matX, cv::DECOMP_QR);
 
+    // step: 5 检查一下是否有退化的情况
     if (iterCount == 0) {
-      // 检查一下是否有退化的情况
       cv::Mat matE(1, 6, CV_32F, cv::Scalar::all(0));
       cv::Mat matV(6, 6, CV_32F, cv::Scalar::all(0));
       cv::Mat matV2(6, 6, CV_32F, cv::Scalar::all(0));
@@ -1505,32 +1516,35 @@ class mapOptimization : public ParamServer {
       }
       matP = matV.inv() * matV2;
     }
-    // 如果发生退化，就对增量进行修改，退化方向不更新
+
+    // step: 6 如果发生退化，就对增量进行修改，退化方向不更新
     if (isDegenerate) {
       cv::Mat matX2(6, 1, CV_32F, cv::Scalar::all(0));
       matX.copyTo(matX2);
       matX = matP * matX2;
     }
-    // 增量更新
+
+    // step: 7 增量更新
     transformTobeMapped[0] += matX.at<float>(0, 0);
     transformTobeMapped[1] += matX.at<float>(1, 0);
     transformTobeMapped[2] += matX.at<float>(2, 0);
     transformTobeMapped[3] += matX.at<float>(3, 0);
     transformTobeMapped[4] += matX.at<float>(4, 0);
     transformTobeMapped[5] += matX.at<float>(5, 0);
-    // 计算更新的旋转和平移大小
+
+    // step: 8 计算更新的旋转和平移大小，旋转和平移增量足够小则收敛
     float deltaR = sqrt(pow(pcl::rad2deg(matX.at<float>(0, 0)), 2) +
                         pow(pcl::rad2deg(matX.at<float>(1, 0)), 2) +
                         pow(pcl::rad2deg(matX.at<float>(2, 0)), 2));
     float deltaT = sqrt(pow(matX.at<float>(3, 0) * 100, 2) +
                         pow(matX.at<float>(4, 0) * 100, 2) +
                         pow(matX.at<float>(5, 0) * 100, 2));
-    // 旋转和平移增量足够小，认为优化问题收敛了
     if (deltaR < 0.05 && deltaT < 0.05) {
-      return true;  // converged
+      return true;
     }
+
     // 否则继续优化
-    return false;  // keep optimizing
+    return false;
   }
 
   // api: 点云配准
@@ -1559,6 +1573,7 @@ class mapOptimization : public ParamServer {
         // step: 4.3 结合角点和面点
         combineOptimizationCoeffs();
 
+        // step: 4.4 执行GN优化
         if (LMOptimization(iterCount) == true) break;
       }
 
@@ -1573,18 +1588,17 @@ class mapOptimization : public ParamServer {
 
   // api: 把结果和imu进行一些加权融合
   void transformUpdate() {
-    // 可以获取九轴imu的世界系下的姿态
+    // step: 1 可以获取九轴imu的世界系下的姿态进行加权
     if (cloudInfo.imuAvailable == true) {
-      // 因为roll 和
-      // pitch原则上全程可观，因此这里把lidar推算出来的姿态和磁力计结果做一个加权平均
-      // 首先判断车翻了没有，车翻了好像做slam也没有什么意义了，当然手持设备可以pitch很大，这里主要避免插值产生的奇异
+      // note: roll和pitch原则上可观，lidar推算的姿态和磁力计结果做加权平均
+      // note: 判断车翻了没有，车翻了好像做slam也没有什么意义了
       if (std::abs(cloudInfo.imuPitchInit) < 1.4) {
         double imuWeight = imuRPYWeight;
         tf::Quaternion imuQuaternion;
         tf::Quaternion transformQuaternion;
         double rollMid, pitchMid, yawMid;
 
-        // slerp roll
+        // step: 1.1 slerp roll
         // lidar匹配获得的roll角转成四元数
         transformQuaternion.setRPY(transformTobeMapped[0], 0, 0);
         // imu获得的roll角
@@ -1595,8 +1609,7 @@ class mapOptimization : public ParamServer {
         // 插值结果作为roll的最终结果
         transformTobeMapped[0] = rollMid;
 
-        // 下面pitch角同理
-        // slerp pitch
+        // step: 1.2 slerp pitch
         transformQuaternion.setRPY(0, transformTobeMapped[1], 0);
         imuQuaternion.setRPY(0, cloudInfo.imuPitchInit, 0);
         tf::Matrix3x3(transformQuaternion.slerp(imuQuaternion, imuWeight))
@@ -1604,15 +1617,16 @@ class mapOptimization : public ParamServer {
         transformTobeMapped[1] = pitchMid;
       }
     }
-    // 对roll
-    // pitch和z进行一些约束，主要针对室内2d场景下，已知2d先验可以加上这些约束
+
+    // step: 2 对roll, pitch和z进行一些约束
     transformTobeMapped[0] =
         constraintTransformation(transformTobeMapped[0], rotation_tollerance);
     transformTobeMapped[1] =
         constraintTransformation(transformTobeMapped[1], rotation_tollerance);
     transformTobeMapped[5] =
         constraintTransformation(transformTobeMapped[5], z_tollerance);
-    // 最终的结果也可以转成eigen的结构
+
+    // step: 3 最终的结果也可以转成eigen的结构
     incrementalOdometryAffineBack = trans2Affine3f(transformTobeMapped);
   }
 
