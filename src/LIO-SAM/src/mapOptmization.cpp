@@ -162,22 +162,15 @@ class mapOptimization : public ParamServer {
   Eigen::Affine3f incrementalOdometryAffineFront;
   Eigen::Affine3f incrementalOdometryAffineBack;
 
+  // api: 构造函数
   mapOptimization() {
+    // step: 1 isam2参数
     ISAM2Params parameters;
     parameters.relinearizeThreshold = 0.1;
     parameters.relinearizeSkip = 1;
     isam = new ISAM2(parameters);
 
-    pubKeyPoses =
-        nh.advertise<sensor_msgs::PointCloud2>("lio_sam/mapping/trajectory", 1);
-    pubLaserCloudSurround =
-        nh.advertise<sensor_msgs::PointCloud2>("lio_sam/mapping/map_global", 1);
-    pubLaserOdometryGlobal =
-        nh.advertise<nav_msgs::Odometry>("lio_sam/mapping/odometry", 1);
-    pubLaserOdometryIncremental = nh.advertise<nav_msgs::Odometry>(
-        "lio_sam/mapping/odometry_incremental", 1);
-    pubPath = nh.advertise<nav_msgs::Path>("lio_sam/mapping/path", 1);
-
+    // step: 2 订阅特征提取后的点云信息、gps和回环检测
     subCloud = nh.subscribe<lio_sam::cloud_info>(
         "lio_sam/feature/cloud_info", 1,
         &mapOptimization::laserCloudInfoHandler, this,
@@ -188,6 +181,18 @@ class mapOptimization : public ParamServer {
     subLoop = nh.subscribe<std_msgs::Float64MultiArray>(
         "lio_loop/loop_closure_detection", 1, &mapOptimization::loopInfoHandler,
         this, ros::TransportHints().tcpNoDelay());
+
+    // step: 3 发布关键帧点云、
+    pubKeyPoses =
+        nh.advertise<sensor_msgs::PointCloud2>("lio_sam/mapping/trajectory", 1);
+    pubLaserCloudSurround =
+        nh.advertise<sensor_msgs::PointCloud2>("lio_sam/mapping/map_global", 1);
+    pubLaserOdometryGlobal =
+        nh.advertise<nav_msgs::Odometry>("lio_sam/mapping/odometry", 1);
+    pubLaserOdometryIncremental = nh.advertise<nav_msgs::Odometry>(
+        "lio_sam/mapping/odometry_incremental", 1);
+    pubPath = nh.advertise<nav_msgs::Path>("lio_sam/mapping/path", 1);
+
     // 订阅一个保存地图功能的服务
     srvSaveMap = nh.advertiseService("lio_sam/save_map",
                                      &mapOptimization::saveMapService, this);
@@ -220,7 +225,8 @@ class mapOptimization : public ParamServer {
 
     allocateMemory();
   }
-  // 预先分配内存
+
+  // api: 预先分配内存
   void allocateMemory() {
     cloudKeyPoses3D.reset(new pcl::PointCloud<PointType>());
     cloudKeyPoses6D.reset(new pcl::PointCloud<PointTypePose>());
@@ -275,13 +281,11 @@ class mapOptimization : public ParamServer {
 
   // api: 点云数据回调
   void laserCloudInfoHandler(const lio_sam::cloud_infoConstPtr& msgIn) {
-    // extract time stamp
-    // 提取当前时间戳
+    // step: 1 提取当前时间戳
     timeLaserInfoStamp = msgIn->header.stamp;
     timeLaserInfoCur = msgIn->header.stamp.toSec();
 
-    // extract info and feature cloud
-    // 提取cloudinfo中的角点和面点
+    // step: 2 提取cloudinfo中的角点和面点
     cloudInfo = *msgIn;
     pcl::fromROSMsg(msgIn->cloud_corner, *laserCloudCornerLast);
     pcl::fromROSMsg(msgIn->cloud_surface, *laserCloudSurfLast);
@@ -289,28 +293,36 @@ class mapOptimization : public ParamServer {
     std::lock_guard<std::mutex> lock(mtx);
 
     static double timeLastProcessing = -1;
-    // 控制后端频率，两帧处理一帧
+    // note: 控制后端频率，两帧处理一帧
     if (timeLaserInfoCur - timeLastProcessing >= mappingProcessInterval) {
       timeLastProcessing = timeLaserInfoCur;
-      // 更新当前匹配结果的初始位姿
+      // step: 3 更新当前匹配结果的初始位姿
       updateInitialGuess();
-      // 提取当前帧相关的关键帧并且构建点云局部地图
+
+      // step: 4 提取当前帧相关的关键帧并且构建点云局部地图
       extractSurroundingKeyFrames();
-      // 对当前帧进行下采样
+
+      // step: 5 对当前帧进行下采样
       downsampleCurrentScan();
-      // 对点云配准进行优化问题构建求解
+
+      // step: 6 对点云配准进行优化问题构建求解
       scan2MapOptimization();
+
       // 根据配准结果确定是否是关键帧
       saveKeyFramesAndFactor();
+
       // 调整全局轨迹
       correctPoses();
+
       // 将lidar里程记信息发送出去
       publishOdometry();
+
       // 发送可视化点云信息
       publishFrames();
     }
   }
-  // 收集gps信息
+
+  // api: 收集gps信息
   void gpsHandler(const nav_msgs::Odometry::ConstPtr& gpsMsg) {
     gpsQueue.push_back(*gpsMsg);
   }
@@ -908,52 +920,54 @@ class mapOptimization : public ParamServer {
   }
 
   // api: 更新初值
-  // 作为基于优化方式的点云匹配，初始值是非常重要的，一个好的初始值会帮助优化问题快速收敛且避免局部最优解的情况
+  // 作为基于优化方式的点云匹配，初始值是非常重要，好的初始值会帮助优化问题快速收敛且避免局部最优解的情况
   void updateInitialGuess() {
-    // save current transformation before any processing
-    // transformTobeMapped是上一帧优化后的最佳位姿
+    // step: 1 transformTobeMapped是上一帧优化后的最佳位姿(Eigen)
     incrementalOdometryAffineFront = trans2Affine3f(transformTobeMapped);
 
+    // step: 2 没有关键帧，也就是系统刚刚初始化完成
     static Eigen::Affine3f lastImuTransformation;
-    // initialization
-    // 没有关键帧，也就是系统刚刚初始化完成
     if (cloudKeyPoses3D->points.empty()) {
-      // 初始的位姿就由磁力计提供
+      // step: 2.1 初始的位姿就由磁力计提供
       transformTobeMapped[0] = cloudInfo.imuRollInit;
       transformTobeMapped[1] = cloudInfo.imuPitchInit;
       transformTobeMapped[2] = cloudInfo.imuYawInit;
-      // 无论vio还是lio
-      // 系统的不可观都是4自由度，平移+yaw角，这里虽然有磁力计将yaw对齐，但是也可以考虑不使用yaw
+
+      // note: 无论vio还是lio，系统的不可观都是4自由度，平移+yaw角
+      // step: 2.2 这里虽然有磁力计将yaw对齐，但是也可以考虑不使用yaw
       if (!useImuHeadingInitialization) transformTobeMapped[2] = 0;
-      // 保存磁力计得到的位姿，平移置0
-      lastImuTransformation = pcl::getTransformation(
-          0, 0, 0, cloudInfo.imuRollInit, cloudInfo.imuPitchInit,
-          cloudInfo.imuYawInit);  // save imu before return;
+
+      // step: 2.3 保存磁力计得到的位姿，平移置0
+      lastImuTransformation =
+          pcl::getTransformation(0, 0, 0, cloudInfo.imuRollInit,
+                                 cloudInfo.imuPitchInit, cloudInfo.imuYawInit);
+
       return;
     }
 
-    // use imu pre-integration estimation for pose guess
+    // step: 3 如果有预积分节点提供的里程记则使用
     static bool lastImuPreTransAvailable = false;
     static Eigen::Affine3f lastImuPreTransformation;
-    // 如果有预积分节点提供的里程记
     if (cloudInfo.odomAvailable == true) {
-      // 将提供的初值转成eigen的数据结构保存下来
+      // step: 3.1 将提供的初值转成eigen的数据结构保存下来
       Eigen::Affine3f transBack = pcl::getTransformation(
           cloudInfo.initialGuessX, cloudInfo.initialGuessY,
           cloudInfo.initialGuessZ, cloudInfo.initialGuessRoll,
           cloudInfo.initialGuessPitch, cloudInfo.initialGuessYaw);
-      // 这个标志位表示是否收到过第一帧预积分里程记信息
+
+      // step: 3.2 这个标志位表示是否收到过第一帧预积分里程记信息
       if (lastImuPreTransAvailable == false) {
         // 将当前里程记结果记录下来
         lastImuPreTransformation = transBack;
         // 收到第一个里程记数据以后这个标志位就是true
         lastImuPreTransAvailable = true;
       } else {
-        // 计算上一个里程记的结果和当前里程记结果之间的delta pose
+        // step: 3.3 计算上一个里程记的结果和当前里程记结果之间的delta pose
         Eigen::Affine3f transIncre =
             lastImuPreTransformation.inverse() * transBack;
+
+        // step: 3.4 增量加到上一帧最佳位姿上去作为当前帧的先验估计位姿
         Eigen::Affine3f transTobe = trans2Affine3f(transformTobeMapped);
-        // 将这个增量加到上一帧最佳位姿上去，就是当前帧位姿的一个先验估计位姿
         Eigen::Affine3f transFinal = transTobe * transIncre;
         // 将eigen变量转成欧拉角和平移的形式
         pcl::getTranslationAndEulerAngles(
@@ -961,25 +975,25 @@ class mapOptimization : public ParamServer {
             transformTobeMapped[5], transformTobeMapped[0],
             transformTobeMapped[1], transformTobeMapped[2]);
 
-        // 同理，把当前帧的值保存下来
+        // step: 3.5 同理，把当前帧的值保存下来
         lastImuPreTransformation = transBack;
-        // 虽然有里程记信息，仍然需要把imu磁力计得到的旋转记录下来
+
+        // step: 3.6 虽然有里程记信息，仍然需要把imu磁力计得到的旋转记录下来
         lastImuTransformation = pcl::getTransformation(
             0, 0, 0, cloudInfo.imuRollInit, cloudInfo.imuPitchInit,
-            cloudInfo.imuYawInit);  // save imu before return;
+            cloudInfo.imuYawInit);
         return;
       }
     }
 
-    // use imu incremental estimation for pose guess (only rotation)
-    // 如果没有里程记信息，就是用imu的旋转信息来更新，因为单纯使用imu无法得到靠谱的平移信息，因此，平移直接置0
+    // step: 4 如果没有里程记信息，就是用imu的旋转信息来更新
+    // 因为单纯使用imu无法得到靠谱的平移信息，因此，平移直接置0
     if (cloudInfo.imuAvailable == true) {
-      // 初值计算方式和上面相同，只不过注意平移置0
+      // step: 4.1 初值计算方式和上面相同，只不过注意平移置0
       Eigen::Affine3f transBack =
           pcl::getTransformation(0, 0, 0, cloudInfo.imuRollInit,
                                  cloudInfo.imuPitchInit, cloudInfo.imuYawInit);
       Eigen::Affine3f transIncre = lastImuTransformation.inverse() * transBack;
-
       Eigen::Affine3f transTobe = trans2Affine3f(transformTobeMapped);
       Eigen::Affine3f transFinal = transTobe * transIncre;
       pcl::getTranslationAndEulerAngles(
@@ -987,9 +1001,10 @@ class mapOptimization : public ParamServer {
           transformTobeMapped[5], transformTobeMapped[0],
           transformTobeMapped[1], transformTobeMapped[2]);
 
-      lastImuTransformation = pcl::getTransformation(
-          0, 0, 0, cloudInfo.imuRollInit, cloudInfo.imuPitchInit,
-          cloudInfo.imuYawInit);  // save imu before return;
+      // step: 4.2 把imu磁力计得到的旋转记录下来
+      lastImuTransformation =
+          pcl::getTransformation(0, 0, 0, cloudInfo.imuRollInit,
+                                 cloudInfo.imuPitchInit, cloudInfo.imuYawInit);
       return;
     }
   }
@@ -1008,6 +1023,7 @@ class mapOptimization : public ParamServer {
     extractCloud(cloudToExtract);
   }
 
+  // api: 提取当前帧相关的关键帧并且构建点云局部地图
   void extractNearby() {
     pcl::PointCloud<PointType>::Ptr surroundingKeyPoses(
         new pcl::PointCloud<PointType>());
@@ -1017,32 +1033,33 @@ class mapOptimization : public ParamServer {
     std::vector<float> pointSearchSqDis;  // 保存距离查询位置的距离的数组
 
     // extract all the nearby key poses and downsample them
-    kdtreeSurroundingKeyPoses->setInputCloud(
-        cloudKeyPoses3D);  // create kd-tree
-    // 根据最后一个KF的位置，提取一定距离内的关键帧
+    // step: 1 构建关键帧位置的kd-tree
+    kdtreeSurroundingKeyPoses->setInputCloud(cloudKeyPoses3D);
+
+    // step: 2 根据最后一个KF的位置，提取一定距离内的关键帧
     kdtreeSurroundingKeyPoses->radiusSearch(
         cloudKeyPoses3D->back(), (double)surroundingKeyframeSearchRadius,
         pointSearchInd, pointSearchSqDis);
-    // 根据查询的结果，把这些点的位置存进一个点云结构中
+
+    // step: 3 根据查询的结果，把这些点的位置存进一个点云结构中
     for (int i = 0; i < (int)pointSearchInd.size(); ++i) {
       int id = pointSearchInd[i];
       surroundingKeyPoses->push_back(cloudKeyPoses3D->points[id]);
     }
 
-    // 避免关键帧过多，因此做一个下采样
+    // step: 4 避免关键帧过多，因此做一个下采样
     downSizeFilterSurroundingKeyPoses.setInputCloud(surroundingKeyPoses);
     downSizeFilterSurroundingKeyPoses.filter(*surroundingKeyPosesDS);
-    // 确认每个下采样后的点的索引，就使用一个最近邻搜索，其索引赋值给这个点的intensity数据位
+
+    // step: 5 每个下采样后的点的索引，最近邻搜索点的索引赋值给当前点的intensity
     for (auto& pt : surroundingKeyPosesDS->points) {
       kdtreeSurroundingKeyPoses->nearestKSearch(pt, 1, pointSearchInd,
                                                 pointSearchSqDis);
       pt.intensity = cloudKeyPoses3D->points[pointSearchInd[0]].intensity;
     }
 
-    // also extract some latest key frames in case the robot rotates in one
-    // position
+    // step: 6 提取一些时间较近的关键帧
     int numPoses = cloudKeyPoses3D->size();
-    // 刚刚是提取了一些空间上比较近的关键帧，然后再提取一些时间上比较近的关键帧
     for (int i = numPoses - 1; i >= 0; --i) {
       // 最近十秒的关键帧也保存下来
       if (timeLaserInfoCur - cloudKeyPoses6D->points[i].time < 10.0)
@@ -1050,64 +1067,64 @@ class mapOptimization : public ParamServer {
       else
         break;
     }
-    // 根据筛选出来的关键帧进行局部地图构建
+
+    // step: 7 根据筛选出来的关键帧进行局部地图构建
     extractCloud(surroundingKeyPosesDS);
   }
 
+  // api: 根据筛选出来的关键帧进行局部地图构建
   void extractCloud(pcl::PointCloud<PointType>::Ptr cloudToExtract) {
-    // fuse the map
     // 分别存储角点和面点相关的局部地图
     laserCloudCornerFromMap->clear();
     laserCloudSurfFromMap->clear();
+
     for (int i = 0; i < (int)cloudToExtract->size(); ++i) {
-      // 简单校验一下关键帧距离不能太远，这个实际上不太会触发
+      // step: 1 简单校验一下关键帧距离不能太远，这个实际上不太会触发
       if (pointDistance(cloudToExtract->points[i], cloudKeyPoses3D->back()) >
           surroundingKeyframeSearchRadius)
         continue;
-      // 取出提出出来的关键帧的索引
+
+      // step: 2 取出提出出来的关键帧的索引
       int thisKeyInd = (int)cloudToExtract->points[i].intensity;
-      // 如果这个关键帧对应的点云信息已经存储在一个地图容器里
+
+      // step: 3 关键帧对应的点云信息在地图容器里，直接加到局部地图中
       if (laserCloudMapContainer.find(thisKeyInd) !=
           laserCloudMapContainer.end()) {
-        // transformed cloud available
-        // 直接从容器中取出来加到局部地图中
         *laserCloudCornerFromMap += laserCloudMapContainer[thisKeyInd].first;
         *laserCloudSurfFromMap += laserCloudMapContainer[thisKeyInd].second;
       } else {
-        // transformed cloud not available
-        // 如果这个点云没有实现存取，那就通过该帧对应的位姿，把该帧点云从当前帧的位姿转到世界坐标系下
+        // step: 4 否则通过该帧的位姿，把点云从当前帧的位姿转到世界坐标系下
         pcl::PointCloud<PointType> laserCloudCornerTemp =
             *transformPointCloud(cornerCloudKeyFrames[thisKeyInd],
                                  &cloudKeyPoses6D->points[thisKeyInd]);
         pcl::PointCloud<PointType> laserCloudSurfTemp =
             *transformPointCloud(surfCloudKeyFrames[thisKeyInd],
                                  &cloudKeyPoses6D->points[thisKeyInd]);
-        // 点云转换之后加到局部地图中
+        // step: 5 点云转换之后加到局部地图中
         *laserCloudCornerFromMap += laserCloudCornerTemp;
         *laserCloudSurfFromMap += laserCloudSurfTemp;
-        // 把转换后的面点和角点存进这个容器中，方便后续直接加入点云地图，避免点云转换的操作，节约时间
+
+        // step: 6 转换后的面点和角点存进这个容器中
         laserCloudMapContainer[thisKeyInd] =
             make_pair(laserCloudCornerTemp, laserCloudSurfTemp);
       }
     }
 
-    // Downsample the surrounding corner key frames (or map)
-    // 将提取的关键帧的点云转到世界坐标系下后，避免点云过度密集，因此对面点和角点的局部地图做一个下采样的过程
+    // step: 7 对面点和角点的局部地图做一个下采样的过程
     downSizeFilterCorner.setInputCloud(laserCloudCornerFromMap);
     downSizeFilterCorner.filter(*laserCloudCornerFromMapDS);
     laserCloudCornerFromMapDSNum = laserCloudCornerFromMapDS->size();
-    // Downsample the surrounding surf key frames (or map)
     downSizeFilterSurf.setInputCloud(laserCloudSurfFromMap);
     downSizeFilterSurf.filter(*laserCloudSurfFromMapDS);
     laserCloudSurfFromMapDSNum = laserCloudSurfFromMapDS->size();
 
-    // clear map cache if too large
-    // 如果这个局部地图容器过大，就clear一下，避免占用内存过大
+    // step: 8 如果这个局部地图容器过大，就clear一下，避免占用内存过大
     if (laserCloudMapContainer.size() > 1000) laserCloudMapContainer.clear();
   }
 
+  // api: 提取当前帧相关的关键帧并且构建点云局部地图
   void extractSurroundingKeyFrames() {
-    // 如果当前没有关键帧，就return了
+    // step: 1 如果当前没有关键帧，就return了
     if (cloudKeyPoses3D->points.empty() == true) return;
 
     // if (loopClosureEnableFlag == true)
@@ -1117,9 +1134,11 @@ class mapOptimization : public ParamServer {
     //     extractNearby();
     // }
 
+    // step: 2 提取当前帧相关的关键帧并且构建点云局部地图
     extractNearby();
   }
 
+  // api: 当前点云下采样
   void downsampleCurrentScan() {
     // Downsample cloud from current scan
     // 当前帧的角点和面点分别进行下采样，也就是为了减少计算量
@@ -1134,12 +1153,15 @@ class mapOptimization : public ParamServer {
     laserCloudSurfLastDSNum = laserCloudSurfLastDS->size();
   }
 
+  // api: 求点到地图作弊系的变换Eigen
   void updatePointAssociateToMap() {
     // 将欧拉角转成eigen的对象
     transPointAssociateToMap = trans2Affine3f(transformTobeMapped);
   }
 
+  // api: 角点优化
   void cornerOptimization() {
+    // step: 1 求点到地图作弊系的变换Eigen
     updatePointAssociateToMap();
 // 使用openmp并行加速
 #pragma omp parallel for num_threads(numberOfCores)
@@ -1151,7 +1173,7 @@ class mapOptimization : public ParamServer {
 
       pointOri = laserCloudCornerLastDS->points[i];
       // 将该点从当前帧通过初始的位姿转换到地图坐标系下去
-      pointAssociateToMap(&pointOri, &pointSel);
+      (&pointOri, &pointSel);
       // 在角点地图里寻找距离当前点比较近的5个点
       kdtreeCornerFromMap->nearestKSearch(pointSel, 5, pointSearchInd,
                                           pointSearchSqDis);
@@ -1344,6 +1366,7 @@ class mapOptimization : public ParamServer {
       }
     }
   }
+
   // 将角点约束和面点约束统一到一起
   void combineOptimizationCoeffs() {
     // combine corner coeffs
@@ -1510,28 +1533,36 @@ class mapOptimization : public ParamServer {
     return false;  // keep optimizing
   }
 
+  // api: 点云配准
   void scan2MapOptimization() {
-    // 如果没有关键帧，那也没办法做当前帧到局部地图的匹配
+    // step: 1 如果没有关键帧，那也没办法做当前帧到局部地图的匹配
     if (cloudKeyPoses3D->points.empty()) return;
-    // 判断当前帧的角点数和面点数是否足够
+
+    // step: 2 判断当前帧的角点数和面点数是否足够
     if (laserCloudCornerLastDSNum > edgeFeatureMinValidNum &&
         laserCloudSurfLastDSNum > surfFeatureMinValidNum) {
-      // 分别把角点面点局部地图构建kdtree
+      // step: 3 分别把角点面点局部地图构建kdtree
       kdtreeCornerFromMap->setInputCloud(laserCloudCornerFromMapDS);
       kdtreeSurfFromMap->setInputCloud(laserCloudSurfFromMapDS);
-      // 迭代求解
+
+      // step: 4 迭代求解
       for (int iterCount = 0; iterCount < 30; iterCount++) {
         laserCloudOri->clear();
         coeffSel->clear();
 
+        // step: 4.1 角点优化
         cornerOptimization();
+
+        // step: 4.2 面点优化
         surfOptimization();
 
+        // step: 4.3 结合角点和面点
         combineOptimizationCoeffs();
 
         if (LMOptimization(iterCount) == true) break;
       }
-      // 优化问题结束
+
+      // step: 5 优化问题结束
       transformUpdate();
     } else {
       ROS_WARN(
@@ -1540,7 +1571,7 @@ class mapOptimization : public ParamServer {
     }
   }
 
-  // 把结果和imu进行一些加权融合
+  // api: 把结果和imu进行一些加权融合
   void transformUpdate() {
     // 可以获取九轴imu的世界系下的姿态
     if (cloudInfo.imuAvailable == true) {
