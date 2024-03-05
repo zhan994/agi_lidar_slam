@@ -261,7 +261,12 @@ class ParamServer {
     usleep(100);
   }
 
-  // api: IMU数据转换
+  /**
+   * \brief  // api: IMU数据转换前左上
+   *
+   * \param imu_in 输入
+   * \return sensor_msgs::Imu 输出
+   */
   sensor_msgs::Imu imuConverter(const sensor_msgs::Imu& imu_in) {
     sensor_msgs::Imu imu_out = imu_in;
     // 这里把imu的数据旋转到前左上坐标系下，可以参考https://github.com/TixiaoShan/LIO-SAM/issues/6
@@ -281,7 +286,7 @@ class ParamServer {
     imu_out.angular_velocity.x = gyr.x();
     imu_out.angular_velocity.y = gyr.y();
     imu_out.angular_velocity.z = gyr.z();
-    
+
     // step: 3 rotate roll pitch yaw
     // 这是一个九轴imu，因此还会有姿态信息
     Eigen::Quaterniond q_from(imu_in.orientation.w, imu_in.orientation.x,
@@ -291,7 +296,7 @@ class ParamServer {
     imu_out.orientation.y = q_final.y();
     imu_out.orientation.z = q_final.z();
     imu_out.orientation.w = q_final.w();
-    
+
     // step: 4 简单校验一下结果
     if (sqrt(q_final.x() * q_final.x() + q_final.y() * q_final.y() +
              q_final.z() * q_final.z() + q_final.w() * q_final.w()) < 0.1) {
@@ -303,7 +308,15 @@ class ParamServer {
   }
 };
 
-// api: 发布点云
+/**
+ * \brief // api: 发布点云
+ *
+ * \param thisPub 发布者
+ * \param thisCloud 点云数据
+ * \param thisStamp 时间戳
+ * \param thisFrame 坐标系
+ * \return sensor_msgs::PointCloud2 消息
+ */
 sensor_msgs::PointCloud2 publishCloud(ros::Publisher* thisPub,
                                       pcl::PointCloud<PointType>::Ptr thisCloud,
                                       ros::Time thisStamp,
@@ -316,13 +329,27 @@ sensor_msgs::PointCloud2 publishCloud(ros::Publisher* thisPub,
   return tempCloud;
 }
 
-// api: 取ROS消息的时间戳
+/**
+ * \brief // api: 取ROS消息的时间戳
+ *
+ * \tparam T
+ * \param msg 消息
+ * \return double 时间戳
+ */
 template <typename T>
 double ROS_TIME(T msg) {
   return msg->header.stamp.toSec();
 }
 
-// api: 取ROS消息的IMU角速度
+/**
+ * \brief // api: 取ROS消息的IMU角速度
+ *
+ * \tparam T
+ * \param thisImuMsg 消息
+ * \param angular_x roll角速度
+ * \param angular_y pitch角速度
+ * \param angular_z yaw角速度
+ */
 template <typename T>
 void imuAngular2rosAngular(sensor_msgs::Imu* thisImuMsg, T* angular_x,
                            T* angular_y, T* angular_z) {
