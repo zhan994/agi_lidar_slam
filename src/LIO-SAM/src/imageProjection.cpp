@@ -83,7 +83,10 @@ class ImageProjection : public ParamServer {
   std_msgs::Header cloudHeader;
 
  public:
-  // api: 构造函数
+  /**
+   * \brief // api: 构造函数
+   *
+   */
   ImageProjection() : deskewFlag(0) {
     // step: 1 订阅imu数据，后端里程记数据，原始点云数据
     subImu = nh.subscribe<sensor_msgs::Imu>(imuTopic, 2000,
@@ -111,7 +114,10 @@ class ImageProjection : public ParamServer {
     pcl::console::setVerbosityLevel(pcl::console::L_ERROR);
   }
 
-  // api: 分配相关内存
+  /**
+   * \brief // api: 分配相关内存
+   *
+   */
   void allocateMemory() {
     laserCloudIn.reset(new pcl::PointCloud<PointXYZIRT>());
     tmpOusterCloudIn.reset(new pcl::PointCloud<OusterPointXYZIRT>());
@@ -129,7 +135,10 @@ class ImageProjection : public ParamServer {
     resetParameters();
   }
 
-  // api: 重置参数
+  /**
+   * \brief // api: 重置参数
+   *
+   */
   void resetParameters() {
     laserCloudIn->clear();
     extractedCloud->clear();
@@ -150,7 +159,11 @@ class ImageProjection : public ParamServer {
 
   ~ImageProjection() {}
 
-  // api: IMU回调
+  /**
+   * \brief // api: IMU回调
+   *
+   * \param imuMsg 消息
+   */
   void imuHandler(const sensor_msgs::Imu::ConstPtr& imuMsg) {
     sensor_msgs::Imu thisImu = imuConverter(*imuMsg);  // 对imu做一个坐标转换
     // 加一个线程锁，把imu数据保存进队列
@@ -176,13 +189,21 @@ class ImageProjection : public ParamServer {
     // imuYaw << endl << endl;
   }
 
-  // api: 预积分计算的增量里程计
+  /**
+   * \brief // api: 预积分计算的增量里程计
+   *
+   * \param odometryMsg 消息
+   */
   void odometryHandler(const nav_msgs::Odometry::ConstPtr& odometryMsg) {
     std::lock_guard<std::mutex> lock2(odoLock);
     odomQueue.push_back(*odometryMsg);
   }
 
-  // api: 点云回调
+  /**
+   * \brief // api: 点云回调
+   *
+   * \param laserCloudMsg 消息
+   */
   void cloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg) {
     // step: 1 点云消息预处理
     if (!cachePointCloud(laserCloudMsg)) return;
@@ -203,7 +224,13 @@ class ImageProjection : public ParamServer {
     resetParameters();
   }
 
-  // api: 点云消息预处理
+  /**
+   * \brief // api: 点云消息预处理
+   *
+   * \param laserCloudMsg 消息
+   * \return true
+   * \return false
+   */
   bool cachePointCloud(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg) {
     // step: 1 点云数据保存进队列，确保队列里大于两帧点云数据
     cloudQueue.push_back(*laserCloudMsg);
@@ -285,7 +312,12 @@ class ImageProjection : public ParamServer {
     return true;
   }
 
-  // api: 去畸变
+  /**
+   * \brief // api: 去畸变信息收集
+   *
+   * \return true
+   * \return false
+   */
   bool deskewInfo() {
     std::lock_guard<std::mutex> lock1(imuLock);
     std::lock_guard<std::mutex> lock2(odoLock);
@@ -307,7 +339,10 @@ class ImageProjection : public ParamServer {
     return true;
   }
 
-  // api: IMU畸变补偿信息
+  /**
+   * \brief // api: IMU畸变补偿信息
+   *
+   */
   void imuDeskewInfo() {
     cloudInfo.imuAvailable = false;
 
@@ -364,7 +399,10 @@ class ImageProjection : public ParamServer {
     cloudInfo.imuAvailable = true;
   }
 
-  // api: 里程计畸变补偿信息
+  /**
+   * \brief // api: 里程计畸变补偿信息
+   *
+   */
   void odomDeskewInfo() {
     cloudInfo.odomAvailable = false;
 
@@ -443,7 +481,14 @@ class ImageProjection : public ParamServer {
     odomDeskewFlag = true;  // 表示可以用odom来做运动补偿
   }
 
-  // api: 计算相对旋转
+  /**
+   * \brief // api: 计算相对旋转
+   *
+   * \param pointTime 点云时间戳
+   * \param rotXCur roll
+   * \param rotYCur pitch
+   * \param rotZCur yaw
+   */
   void findRotation(double pointTime, float* rotXCur, float* rotYCur,
                     float* rotZCur) {
     *rotXCur = 0;
@@ -483,7 +528,14 @@ class ImageProjection : public ParamServer {
     }
   }
 
-  // api: 计算相对位移
+  /**
+   * \brief // api: 计算相对位移
+   *
+   * \param relTime 点云时间戳
+   * \param posXCur x
+   * \param posYCur y
+   * \param posZCur z
+   */
   void findPosition(double relTime, float* posXCur, float* posYCur,
                     float* posZCur) {
     *posXCur = 0;
@@ -503,7 +555,13 @@ class ImageProjection : public ParamServer {
     // *posZCur = ratio * odomIncreZ;
   }
 
-  // api: 去畸变
+  /**
+   * \brief // api: 去畸变
+   *
+   * \param point 点云输入
+   * \param relTime 相对时间
+   * \return PointType 去畸变后输出
+   */
   PointType deskewPoint(PointType* point, double relTime) {
     if (deskewFlag == -1 || cloudInfo.imuAvailable == false) return *point;
 
@@ -545,7 +603,10 @@ class ImageProjection : public ParamServer {
     return newPoint;
   }
 
-  // api: 将点云投影到一个矩阵上，并且保存每个点的信息
+  /**
+   * \brief // api: 将点云投影到一个矩阵上，并且保存每个点的信息
+   *
+   */
   void projectPointCloud() {
     int cloudSize = laserCloudIn->points.size();
     // range image projection
@@ -588,7 +649,10 @@ class ImageProjection : public ParamServer {
     }
   }
 
-  // api: 提取出有效的点的信息
+  /**
+   * \brief // api: 提取出有效的点的信息
+   *
+   */
   void cloudExtraction() {
     int count = 0;
     for (int i = 0; i < N_SCAN; ++i) {
@@ -613,7 +677,10 @@ class ImageProjection : public ParamServer {
     }
   }
 
-  // api: 发布点云
+  /**
+   * \brief // api: 发布点云
+   *
+   */
   void publishClouds() {
     cloudInfo.header = cloudHeader;
     // 发布提取出来的有效的点

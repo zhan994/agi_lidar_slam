@@ -875,7 +875,11 @@ class FeatureAssociation {
     }
   }
 
-  // api: 特征提取
+  
+  /**
+   * \brief // api: 特征提取
+   * 
+   */
   void extractFeatures() {
     cornerPointsSharp->clear();
     cornerPointsLessSharp->clear();
@@ -1284,7 +1288,11 @@ class FeatureAssociation {
 
   double deg2rad(double degrees) { return degrees * M_PI / 180.0; }
 
-  // api: 角点对应点搜索
+  /**
+   * \brief // api: 角点对应点搜索
+   *
+   * \param iterCount 迭代次数
+   */
   void findCorrespondingCornerFeatures(int iterCount) {
     int cornerPointsSharpNum = cornerPointsSharp->points.size();
 
@@ -1403,7 +1411,11 @@ class FeatureAssociation {
     }
   }
 
-  // api: 地面点对应点搜索
+  /**
+   * \brief // api: 地面点对应点搜索
+   *
+   * \param iterCount 迭代次数
+   */
   void findCorrespondingSurfFeatures(int iterCount) {
     int surfPointsFlatNum = surfPointsFlat->points.size();
 
@@ -1551,7 +1563,13 @@ class FeatureAssociation {
     }
   }
 
-  // api: 面点约束优化
+  /**
+   * \brief // api: 面点约束优化
+   *
+   * \param iterCount 迭代次数
+   * \return true
+   * \return false
+   */
   bool calculateTransformationSurf(int iterCount) {
     int pointSelNum = laserCloudOri->points.size();
 
@@ -1677,7 +1695,13 @@ class FeatureAssociation {
     return true;
   }
 
-  // api: 角点约束优化
+  /**
+   * \brief // api: 角点约束优化
+   *
+   * \param iterCount 迭代次数
+   * \return true
+   * \return false
+   */
   bool calculateTransformationCorner(int iterCount) {
     int pointSelNum = laserCloudOri->points.size();
 
@@ -2005,7 +2029,10 @@ class FeatureAssociation {
     }
   }
 
-  // api: 2步优化估计6自由度位姿
+  /**
+   * \brief // api: 2步优化估计6自由度位姿
+   *
+   */
   void updateTransformation() {
     if (laserCloudCornerLastNum < 10 || laserCloudSurfLastNum < 100) return;
 

@@ -41,7 +41,10 @@ class TransformFusion : public ParamServer {
   double lidarOdomTime = -1;
   deque<nav_msgs::Odometry> imuOdomQueue;
 
-  // api: 构造函数
+  /**
+   * \brief // api: 构造函数
+   *
+   */
   TransformFusion() {
     // step: 1 静态tf
     // 如果lidar帧和baselink帧不是同一个坐标系
@@ -70,7 +73,12 @@ class TransformFusion : public ParamServer {
     pubImuPath = nh.advertise<nav_msgs::Path>("lio_sam/imu/path", 1);
   }
 
-  // api: nav_msgs里程计转Affine
+  /**
+   * \brief // api: nav_msgs里程计转Affine
+   *
+   * \param odom 消息
+   * \return Eigen::Affine3f 转换后的位姿
+   */
   Eigen::Affine3f odom2affine(nav_msgs::Odometry odom) {
     double x, y, z, roll, pitch, yaw;
     x = odom.pose.pose.position.x;
@@ -82,7 +90,11 @@ class TransformFusion : public ParamServer {
     return pcl::getTransformation(x, y, z, roll, pitch, yaw);
   }
 
-  // api: 将全局位姿保存下来
+  /**
+   * \brief // api: 将全局位姿保存下来
+   *
+   * \param odomMsg 消息
+   */
   void lidarOdometryHandler(const nav_msgs::Odometry::ConstPtr& odomMsg) {
     std::lock_guard<std::mutex> lock(mtx);
 
@@ -91,7 +103,11 @@ class TransformFusion : public ParamServer {
     lidarOdomTime = odomMsg->header.stamp.toSec();
   }
 
-  // api: IMU预积分发布的incremental的里程计回调
+  /**
+   * \brief // api: IMU预积分发布的incremental的里程计回调
+   *
+   * \param odomMsg 消息
+   */
   void imuOdometryHandler(const nav_msgs::Odometry::ConstPtr& odomMsg) {
     // step: 1 发送静态tf，odom系和map系将他们重合
     static tf::TransformBroadcaster tfMap2Odom;
@@ -220,7 +236,10 @@ class IMUPreintegration : public ParamServer {
       gtsam::Pose3(gtsam::Rot3(1, 0, 0, 0),
                    gtsam::Point3(extTrans.x(), extTrans.y(), extTrans.z()));
 
-  // api: 构造函数
+  /**
+   * \brief // api: 构造函数
+   *
+   */
   IMUPreintegration() {
     // step: 1 订阅imu和后端的incremental的里程计
     subImu = nh.subscribe<sensor_msgs::Imu>(
@@ -280,7 +299,10 @@ class IMUPreintegration : public ParamServer {
         new gtsam::PreintegratedImuMeasurements(p, prior_imu_bias);
   }
 
-  // api: 优化复位
+  /**
+   * \brief // api: 复位优化
+   *
+   */
   void resetOptimization() {
     // gtsam初始化
     gtsam::ISAM2Params optParameters;
@@ -296,13 +318,21 @@ class IMUPreintegration : public ParamServer {
     graphValues = NewGraphValues;
   }
 
+  /**
+   * \brief // api: 复位系统参数
+   *
+   */
   void resetParams() {
     lastImuT_imu = -1;
     doneFirstOpt = false;
     systemInitialized = false;
   }
 
-  // api: 订阅地图优化节点的增量里程记消息
+  /**
+   * \brief // api: 订阅地图优化节点的增量里程记消息
+   *
+   * \param odomMsg 消息
+   */
   void odometryHandler(const nav_msgs::Odometry::ConstPtr& odomMsg) {
     std::lock_guard<std::mutex> lock(mtx);
 
@@ -539,7 +569,14 @@ class IMUPreintegration : public ParamServer {
     doneFirstOpt = true;
   }
 
-  // api: 状态失效检测
+  /**
+   * \brief // api: 状态失效检测
+   *
+   * \param velCur 速度
+   * \param biasCur 零偏
+   * \return true
+   * \return false
+   */
   bool failureDetection(const gtsam::Vector3& velCur,
                         const gtsam::imuBias::ConstantBias& biasCur) {
     Eigen::Vector3f vel(velCur.x(), velCur.y(), velCur.z());
@@ -562,7 +599,11 @@ class IMUPreintegration : public ParamServer {
     return false;
   }
 
-  // api: IMU回调
+  /**
+   * \brief // api: IMU回调
+   *
+   * \param imu_raw 消息
+   */
   void imuHandler(const sensor_msgs::Imu::ConstPtr& imu_raw) {
     std::lock_guard<std::mutex> lock(mtx);
     // step: 1 首先把imu的状态做一个简单的转换，前左上

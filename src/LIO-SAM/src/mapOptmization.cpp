@@ -162,7 +162,10 @@ class mapOptimization : public ParamServer {
   Eigen::Affine3f incrementalOdometryAffineFront;
   Eigen::Affine3f incrementalOdometryAffineBack;
 
-  // api: 构造函数
+  /**
+   * \brief // api: 构造函数
+   *
+   */
   mapOptimization() {
     // step: 1 isam2参数
     ISAM2Params parameters;
@@ -226,7 +229,10 @@ class mapOptimization : public ParamServer {
     allocateMemory();
   }
 
-  // api: 预先分配内存
+  /**
+   * \brief // api: 预先分配内存
+   *
+   */
   void allocateMemory() {
     cloudKeyPoses3D.reset(new pcl::PointCloud<PointType>());
     cloudKeyPoses6D.reset(new pcl::PointCloud<PointTypePose>());
@@ -279,7 +285,11 @@ class mapOptimization : public ParamServer {
     matP = cv::Mat(6, 6, CV_32F, cv::Scalar::all(0));
   }
 
-  // api: 点云数据回调
+  /**
+   * \brief // api: 点云数据回调
+   *
+   * \param msgIn 消息
+   */
   void laserCloudInfoHandler(const lio_sam::cloud_infoConstPtr& msgIn) {
     // step: 1 提取当前时间戳
     timeLaserInfoStamp = msgIn->header.stamp;
@@ -322,11 +332,21 @@ class mapOptimization : public ParamServer {
     }
   }
 
-  // api: 收集gps信息
+  /**
+   * \brief // api: 收集gps信息
+   *
+   * \param gpsMsg 消息
+   */
   void gpsHandler(const nav_msgs::Odometry::ConstPtr& gpsMsg) {
     gpsQueue.push_back(*gpsMsg);
   }
 
+  /**
+   * \brief // api: 点云转换到地图坐标系下
+   *
+   * \param pi 输入
+   * \param po 输出
+   */
   void pointAssociateToMap(PointType const* const pi, PointType* const po) {
     po->x = transPointAssociateToMap(0, 0) * pi->x +
             transPointAssociateToMap(0, 1) * pi->y +
@@ -343,6 +363,13 @@ class mapOptimization : public ParamServer {
     po->intensity = pi->intensity;
   }
 
+  /**
+   * \brief // api: 点云坐标变换
+   *
+   * \param cloudIn 输入
+   * \param transformIn 位姿
+   * \return pcl::PointCloud<PointType>::Ptr 输出
+   */
   pcl::PointCloud<PointType>::Ptr transformPointCloud(
       pcl::PointCloud<PointType>::Ptr cloudIn, PointTypePose* transformIn) {
     pcl::PointCloud<PointType>::Ptr cloudOut(new pcl::PointCloud<PointType>());
@@ -379,6 +406,7 @@ class mapOptimization : public ParamServer {
         gtsam::Point3(double(thisPoint.x), double(thisPoint.y),
                       double(thisPoint.z)));
   }
+
   // 转成gtsam的数据结构
   gtsam::Pose3 trans2gtsamPose(float transformIn[]) {
     return gtsam::Pose3(
@@ -499,6 +527,7 @@ class mapOptimization : public ParamServer {
 
     return true;
   }
+
   // 全局可视化线程
   void visualizeGlobalMapThread() {
     // 更新频率设置为0.2hz
@@ -517,6 +546,7 @@ class mapOptimization : public ParamServer {
       cout << "Fail to save map" << endl;
     }
   }
+
   // 发布可视化全局地图
   void publishGlobalMap() {
     // 如果没有订阅者就不发布，节省系统负载
@@ -611,6 +641,7 @@ class mapOptimization : public ParamServer {
       visualizeLoopClosure();
     }
   }
+
   // 接收外部告知的回环信息
   void loopInfoHandler(const std_msgs::Float64MultiArray::ConstPtr& loopMsg) {
     std::lock_guard<std::mutex> lock(mtxLoopInfo);
@@ -855,6 +886,7 @@ class mapOptimization : public ParamServer {
     downSizeFilterICP.filter(*cloud_temp);
     *nearKeyframes = *cloud_temp;
   }
+
   // 将已有的回环约束可视化出来
   void visualizeLoopClosure() {
     // 如果没有回环约束就算了
@@ -919,7 +951,10 @@ class mapOptimization : public ParamServer {
     pubLoopConstraintEdge.publish(markerArray);
   }
 
-  // api: 更新初值
+  /**
+   * \brief // api: 更新初值
+   *
+   */
   // 作为基于优化方式的点云匹配，初始值是非常重要，好的初始值会帮助优化问题快速收敛且避免局部最优解的情况
   void updateInitialGuess() {
     // step: 1 transformTobeMapped是上一帧优化后的最佳位姿(Eigen)
@@ -1023,7 +1058,10 @@ class mapOptimization : public ParamServer {
     extractCloud(cloudToExtract);
   }
 
-  // api: 提取当前帧相关的关键帧并且构建点云局部地图
+  /**
+   * \brief // api: 提取当前帧相关的关键帧并且构建点云局部地图
+   *
+   */
   void extractNearby() {
     pcl::PointCloud<PointType>::Ptr surroundingKeyPoses(
         new pcl::PointCloud<PointType>());
@@ -1072,7 +1110,11 @@ class mapOptimization : public ParamServer {
     extractCloud(surroundingKeyPosesDS);
   }
 
-  // api: 根据筛选出来的关键帧进行局部地图构建
+  /**
+   * \brief // api: 根据筛选出来的关键帧进行局部地图构建
+   *
+   * \param cloudToExtract 待提取数据
+   */
   void extractCloud(pcl::PointCloud<PointType>::Ptr cloudToExtract) {
     // 分别存储角点和面点相关的局部地图
     laserCloudCornerFromMap->clear();
@@ -1122,7 +1164,10 @@ class mapOptimization : public ParamServer {
     if (laserCloudMapContainer.size() > 1000) laserCloudMapContainer.clear();
   }
 
-  // api: 提取当前帧相关的关键帧并且构建点云局部地图
+  /**
+   * \brief // api: 提取当前帧相关的关键帧并且构建点云局部地图
+   *
+   */
   void extractSurroundingKeyFrames() {
     // step: 1 如果当前没有关键帧，就return了
     if (cloudKeyPoses3D->points.empty() == true) return;
@@ -1138,7 +1183,10 @@ class mapOptimization : public ParamServer {
     extractNearby();
   }
 
-  // api: 当前点云下采样
+  /**
+   * \brief // api: 当前点云下采样
+   *
+   */
   void downsampleCurrentScan() {
     // Downsample cloud from current scan
     // 当前帧的角点和面点分别进行下采样，也就是为了减少计算量
@@ -1153,13 +1201,19 @@ class mapOptimization : public ParamServer {
     laserCloudSurfLastDSNum = laserCloudSurfLastDS->size();
   }
 
-  // api: 求点到地图作弊系的变换Eigen
+  /**
+   * \brief // api: 求点到地图作弊系的变换Eigen
+   *
+   */
   void updatePointAssociateToMap() {
     // 将欧拉角转成eigen的对象
     transPointAssociateToMap = trans2Affine3f(transformTobeMapped);
   }
 
-  // api: 角点优化
+  /**
+   * \brief // api: 角点优化
+   *
+   */
   void cornerOptimization() {
     // step: 1 求点到地图作弊系的变换Eigen
     updatePointAssociateToMap();
@@ -1291,7 +1345,10 @@ class mapOptimization : public ParamServer {
     }
   }
 
-  // api: 面点优化
+  /**
+   * \brief // api: 面点优化
+   *
+   */
   void surfOptimization() {
     // step: 1 求点到地图作弊系的变换Eigen
     updatePointAssociateToMap();
@@ -1371,7 +1428,10 @@ class mapOptimization : public ParamServer {
     }
   }
 
-  // api: 将角点约束和面点约束统一到一起
+  /**
+   * \brief // api: 将角点约束和面点约束统一到一起
+   *
+   */
   void combineOptimizationCoeffs() {
     // step: 1 combine corner coeffs
     for (int i = 0; i < laserCloudCornerLastDSNum; ++i) {
@@ -1396,13 +1456,19 @@ class mapOptimization : public ParamServer {
               false);
   }
 
-  // api: GN优化
+  /**
+   * \brief // api: GN优化
+   *
+   * \param iterCount 迭代次数
+   * \return true
+   * \return false
+   */
   bool LMOptimization(int iterCount) {
     // note: 原始的loam代码是将lidar坐标系转到相机坐标系
     // note: 这里把拷贝了loam中的代码，先转到相机系优化，然后转回lidar系
-    // lidar <- camera      ---     camera<- lidar
+    // lidar <- camera      ---     camera <- lidar
     // x = z                ---     x = y
-    // y = x                ---     y =z
+    // y = x                ---     y = z
     // z = y                ---     z = x
     // roll = yaw           ---     roll = pitch
     // pitch = roll         ---     pitch = yaw
@@ -1547,7 +1613,10 @@ class mapOptimization : public ParamServer {
     return false;
   }
 
-  // api: 点云配准
+  /**
+   * \brief // api: 点云配准
+   *
+   */
   void scan2MapOptimization() {
     // step: 1 如果没有关键帧，那也没办法做当前帧到局部地图的匹配
     if (cloudKeyPoses3D->points.empty()) return;
@@ -1586,7 +1655,10 @@ class mapOptimization : public ParamServer {
     }
   }
 
-  // api: 把结果和imu进行一些加权融合
+  /**
+   * \brief // api: 把结果和imu进行一些加权融合
+   *
+   */
   void transformUpdate() {
     // step: 1 可以获取九轴imu的世界系下的姿态进行加权
     if (cloudInfo.imuAvailable == true) {

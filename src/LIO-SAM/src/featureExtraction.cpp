@@ -35,7 +35,10 @@ class FeatureExtraction : public ParamServer {
   int* cloudNeighborPicked;
   int* cloudLabel;
 
-  // api: 构造函数
+  /**
+   * \brief // api: 构造函数
+   *
+   */
   FeatureExtraction() {
     // step: 1 订阅去畸变后的点云数据
     subLaserCloudInfo = nh.subscribe<lio_sam::cloud_info>(
@@ -55,7 +58,10 @@ class FeatureExtraction : public ParamServer {
     initializationValue();
   }
 
-  // api: 初始化相关参数
+  /**
+   * \brief // api: 初始化相关参数
+   *
+   */
   void initializationValue() {
     cloudSmoothness.resize(N_SCAN * Horizon_SCAN);
 
@@ -71,7 +77,11 @@ class FeatureExtraction : public ParamServer {
     cloudLabel = new int[N_SCAN * Horizon_SCAN];
   }
 
-  // api: 订阅去畸变点云的消息的回调
+  /**
+   * \brief // api: 订阅去畸变点云的消息的回调
+   *
+   * \param msgIn 消息
+   */
   void laserCloudInfoHandler(const lio_sam::cloud_infoConstPtr& msgIn) {
     cloudInfo = *msgIn;           // new cloud info
     cloudHeader = msgIn->header;  // new cloud header
@@ -91,7 +101,10 @@ class FeatureExtraction : public ParamServer {
     publishFeatureCloud();
   }
 
-  // api: 计算曲率
+  /**
+   * \brief // api: 计算曲率
+   *
+   */
   void calculateSmoothness() {
     int cloudSize = extractedCloud->points.size();
     for (int i = 5; i < cloudSize - 5; i++) {
@@ -117,7 +130,10 @@ class FeatureExtraction : public ParamServer {
     }
   }
 
-  // api: 标记一下遮挡点和平行点
+  /**
+   * \brief // api: 标记一下遮挡点和平行点
+   *
+   */
   void markOccludedPoints() {
     int cloudSize = extractedCloud->points.size();
     // mark occluded points and parallel beam points
@@ -160,7 +176,10 @@ class FeatureExtraction : public ParamServer {
     }
   }
 
-  // api: 提取特征
+  /**
+   * \brief // api: 提取特征
+   *
+   */
   void extractFeatures() {
     cornerCloud->clear();
     surfaceCloud->clear();
@@ -276,7 +295,10 @@ class FeatureExtraction : public ParamServer {
     }
   }
 
-  // api: 将一些不会用到的存储空间释放掉
+  /**
+   * \brief // api: 将一些不会用到的存储空间释放掉
+   *
+   */
   void freeCloudInfoMemory() {
     cloudInfo.startRingIndex.clear();
     cloudInfo.endRingIndex.clear();
@@ -284,7 +306,10 @@ class FeatureExtraction : public ParamServer {
     cloudInfo.pointRange.clear();
   }
 
-  // api: 发布点云
+  /**
+   * \brief // api: 发布点云
+   *
+   */
   void publishFeatureCloud() {
     // step: 1 free cloud info memory
     freeCloudInfoMemory();

@@ -284,7 +284,10 @@ class ImageProjection {
     }
   }
 
-  // api: 地面点分离
+  /**
+   * \brief // api: 地面点分离
+   *
+   */
   void groundRemoval() {
     size_t lowerInd, upperInd;
     float diffX, diffY, diffZ, angle;
@@ -344,7 +347,10 @@ class ImageProjection {
     }
   }
 
-  // api: 点云分类
+  /**
+   * \brief // api: 点云分类
+   *
+   */
   void cloudSegmentation() {
     for (size_t i = 0; i < N_SCAN; ++i)
       for (size_t j = 0; j < Horizon_SCAN; ++j)
@@ -363,7 +369,8 @@ class ImageProjection {
       for (size_t j = 0; j < Horizon_SCAN; ++j) {
         // note: 找到可用的特征点或者地面点，不选择labelMat[i][j]<=0的点
         if (labelMat.at<int>(i, j) > 0 || groundMat.at<int8_t>(i, j) == 1) {
-          // step: 2.1 labelMat数值为999999表示这个点是因为聚类数量不够30而被舍弃的点
+          // step: 2.1
+          // labelMat数值为999999表示这个点是因为聚类数量不够30而被舍弃的点
           // 需要舍弃的点直接continue跳过本次循环，
           // 当列数为5的倍数，并且行数较大，可以认为非地面点的，将它保存进异常点云(界外点云)中
           // 然后再跳过本次循环
@@ -413,7 +420,12 @@ class ImageProjection {
     }
   }
 
-  // api: BFS聚类
+  /**
+   * \brief // api: BFS聚类
+   *
+   * \param row
+   * \param col
+   */
   void labelComponents(int row, int col) {
     // std::queue资源消耗较大，使用数组和双指针实现
     float d1, d2, alpha, angle;
@@ -525,7 +537,10 @@ class ImageProjection {
     }
   }
 
-  // 发布各类点云内容
+  /**
+   * \brief // api: 发布各类点云内容
+   *
+   */
   void publishCloud() {
     // 发布cloud_msgs::cloud_info消息
     segMsg.header = cloudHeader;

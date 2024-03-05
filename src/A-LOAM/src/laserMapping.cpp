@@ -197,7 +197,12 @@ void laserCloudFullResHandler(
   mBuf.unlock();
 }
 
-// api: 里程计回调 receive odomtry
+
+/**
+ * \brief // api: 里程计回调 receive odomtry
+ * 
+ * \param laserOdometry 消息
+ */
 void laserOdometryHandler(const nav_msgs::Odometry::ConstPtr& laserOdometry) {
   mBuf.lock();
   odometryBuf.push(laserOdometry);
@@ -231,7 +236,11 @@ void laserOdometryHandler(const nav_msgs::Odometry::ConstPtr& laserOdometry) {
   pubOdomAftMappedHighFrec.publish(odomAftMapped);
 }
 
-// api: 主处理线程
+
+/**
+ * \brief // api: 主处理线程
+ * 
+ */
 void process() {
   while (1) {
     // step: 1 确保需要的buffer里都有值，以corner为基准

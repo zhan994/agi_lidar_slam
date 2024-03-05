@@ -115,7 +115,12 @@ std::queue<sensor_msgs::PointCloud2ConstPtr> surfLessFlatBuf;
 std::queue<sensor_msgs::PointCloud2ConstPtr> fullPointsBuf;
 std::mutex mBuf;
 
-// undistort lidar point
+/**
+ * \brief // api: transform all lidar points to the start of current frame
+ *
+ * \param pi 输入
+ * \param po 输出
+ */
 void TransformToStart(PointType const* const pi, PointType* const po) {
   // interpolation ratio
   double s;
@@ -139,7 +144,12 @@ void TransformToStart(PointType const* const pi, PointType* const po) {
   po->intensity = pi->intensity;
 }
 
-// transform all lidar points to the start of the next frame
+/**
+ * \brief // api: transform all lidar points to the start of the next frame
+ *
+ * \param pi 输入
+ * \param po 输出
+ */
 void TransformToEnd(PointType const* const pi, PointType* const po) {
   // undistort point first
   pcl::PointXYZI un_point_tmp;
@@ -192,7 +202,13 @@ void laserCloudFullResHandler(
   mBuf.unlock();
 }
 
-// api: 主函数
+/**
+ * \brief // api: 主函数
+ *
+ * \param argc
+ * \param argv
+ * \return int
+ */
 int main(int argc, char** argv) {
   ros::init(argc, argv, "laserOdometry");
   ros::NodeHandle nh;

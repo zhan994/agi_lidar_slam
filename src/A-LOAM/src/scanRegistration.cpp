@@ -81,7 +81,14 @@ bool PUB_EACH_LINE = false;
 
 double MINIMUM_RANGE = 0.1;
 
-// 把点云距离小于给定阈值的去除掉，消除盲区内的观测数据
+/**
+ * \brief // api: 把点云距离小于给定阈值的去除掉，消除盲区内的观测数据
+ *
+ * \tparam PointT
+ * \param cloud_in 输入
+ * \param cloud_out 输出
+ * \param thres 阈值
+ */
 template <typename PointT>
 void removeClosedPointCloud(const pcl::PointCloud<PointT>& cloud_in,
                             pcl::PointCloud<PointT>& cloud_out, float thres) {
@@ -109,7 +116,11 @@ void removeClosedPointCloud(const pcl::PointCloud<PointT>& cloud_in,
   cloud_out.is_dense = true;
 }
 
-// api: 主要的回调，订阅lidar消息
+/**
+ * \brief // api: 主要的回调，订阅lidar消息
+ *
+ * \param laserCloudMsg 消息
+ */
 void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg) {
   // 如果系统没有初始化的话，就等几帧
   if (!systemInited) {
@@ -161,11 +172,11 @@ void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg) {
     point.x = laserCloudIn.points[i].x;
     point.y = laserCloudIn.points[i].y;
     point.z = laserCloudIn.points[i].z;
-    
+
     // 计算俯仰角
     float angle = atan(point.z / sqrt(point.x * point.x + point.y * point.y)) *
                   180 / M_PI;
-    
+
     // 计算是第几根scan
     int scanID = 0;
     if (N_SCANS == 16) {
@@ -322,10 +333,11 @@ void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg) {
           }
           // 这个点被选中后 pick标志位置1
           cloudNeighborPicked[ind] = 1;
-          // note: 为了保证特征点不过度集中，将选中的点周围5个点都置1，避免后续会选到
-          // note: 查看相邻点距离是否差异过大，如果差异过大说明点云在此不连续，是特征边缘即新的特征，不置位
+          // note:
+          // 为了保证特征点不过度集中，将选中的点周围5个点都置1，避免后续会选到
+          // note:
+          // 查看相邻点距离是否差异过大，如果差异过大说明点云在此不连续，是特征边缘即新的特征，不置位
           for (int l = 1; l <= 5; l++) {
-            
             float diffX = laserCloud->points[ind + l].x -
                           laserCloud->points[ind + l - 1].x;
             float diffY = laserCloud->points[ind + l].y -
