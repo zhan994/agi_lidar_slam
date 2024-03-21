@@ -7,3 +7,4 @@
 - LeGO-LOAM: https://github.com/RobustFieldAutonomyLab/LeGO-LOAM
 - LIO-SAM: https://github.com/TixiaoShan/LIO-SAM
 - S-FAST_LIO: https://github.com/zlwang7/S-FAST_LIO
+- LIO-Livox: https://github.com/Livox-SDK/LIO-Livox
