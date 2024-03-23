@@ -3,7 +3,7 @@
 
 	<arg name="rviz" default="true" />
 
-	<rosparam command="load" file="$(find sfast_lio)/config/agi_sim_diff.yaml" />
+	<rosparam command="load" file="$(find sfast_lio)/config/agi_sim.yaml" />
 
 	<param name="feature_extract_enable" type="bool" value="0"/>
 	<!-- 100HZ的bag  point_filter_num建议设置为1;   10HZ的bag建议设置为2或3 -->
