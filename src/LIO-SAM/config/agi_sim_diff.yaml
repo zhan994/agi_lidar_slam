@@ -9,7 +9,7 @@ lio_sam:
   # Frames
   lidarFrame: "laser"
   baselinkFrame: "base_link"
-  odometryFrame: "odom_lio"
+  odometryFrame: "odom"
   mapFrame: "map"
 
   # GPS Settings
