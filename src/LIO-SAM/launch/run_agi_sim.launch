@@ -3,7 +3,7 @@
     <arg name="project" default="lio_sam"/>
     
     <!-- Parameters -->
-    <rosparam file="$(find lio_sam)/config/agi_sim_diff.yaml" command="load" />
+    <rosparam file="$(find lio_sam)/config/agi_sim.yaml" command="load" />
 
     <!--- LOAM -->
     <include file="$(find lio_sam)/launch/include/module_loam.launch" />
