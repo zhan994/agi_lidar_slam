@@ -10,7 +10,7 @@ using namespace std;
 typedef pcl::PointXYZINormal PointType;
 typedef pcl::PointCloud<PointType> PointCloudXYZI;
 
-enum LID_TYPE { AVIA = 1, VELO16, OUST64, RS32 };  //{1, 2, 3, 4}
+enum LID_TYPE { AVIA = 1, VELO16, OUST64, RS32 };  // {1, 2, 3, 4}
 enum TIME_UNIT { SEC = 0, MS = 1, US = 2, NS = 3 };
 enum Feature {
   Nor,
@@ -49,10 +49,16 @@ struct EIGEN_ALIGN16 Point {
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
 }  // namespace velodyne_ros
-POINT_CLOUD_REGISTER_POINT_STRUCT(
-    velodyne_ros::Point,
-    (float, x, x)(float, y, y)(float, z, z)(float, intensity, intensity)(
-        float, time, time)(std::uint16_t, ring, ring))
+
+// clang-format off
+POINT_CLOUD_REGISTER_POINT_STRUCT(velodyne_ros::Point,
+    (float, x, x)
+    (float, y, y)
+    (float, z, z)
+    (float, intensity, intensity)
+    (float, time, time)
+    (std::uint16_t, ring, ring)
+)
 
 namespace rslidar_ros {
 struct EIGEN_ALIGN16 Point {
@@ -63,10 +69,16 @@ struct EIGEN_ALIGN16 Point {
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
 }  // namespace rslidar_ros
-POINT_CLOUD_REGISTER_POINT_STRUCT(
-    rslidar_ros::Point,
-    (float, x, x)(float, y, y)(float, z, z)(uint8_t, intensity, intensity)(
-        uint16_t, ring, ring)(double, timestamp, timestamp))
+
+// clang-format off
+POINT_CLOUD_REGISTER_POINT_STRUCT(rslidar_ros::Point,
+    (float, x, x)
+    (float, y, y)
+    (float, z, z)
+    (uint8_t, intensity, intensity)
+    (uint16_t, ring, ring)
+    (double, timestamp, timestamp)
+)
 
 namespace ouster_ros {
 struct EIGEN_ALIGN16 Point {
