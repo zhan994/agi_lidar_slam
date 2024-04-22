@@ -534,62 +534,67 @@ int main(int argc, char** argv) {
   ros::init(argc, argv, "laserMapping");
   ros::NodeHandle nh;
 
+  // step: 1 参数读取
+  // 是否发布轨迹
   nh.param<bool>("publish/path_en", path_en, true);
-  nh.param<bool>("publish/scan_publish_en", scan_pub_en,
-                 true);  // 是否发布当前正在扫描的点云的topic
-  nh.param<bool>("publish/dense_publish_en", dense_pub_en,
-                 true);  // 是否发布经过运动畸变校正注册到IMU坐标系的点云的topic
-  nh.param<bool>(
-      "publish/scan_bodyframe_pub_en", scan_body_pub_en,
-      true);  // 是否发布经过运动畸变校正注册到IMU坐标系的点云的topic，需要该变量和上一个变量同时为true才发布
-  nh.param<int>("max_iteration", NUM_MAX_ITERATIONS,
-                4);  // 卡尔曼滤波的最大迭代次数
-  nh.param<string>("map_file_path", map_file_path, "");  // 地图保存路径
-  nh.param<string>("common/lid_topic", lid_topic,
-                   "/livox/lidar");  // 雷达点云topic名称
-  nh.param<string>("common/imu_topic", imu_topic,
-                   "/livox/imu");  // IMU的topic名称
-  nh.param<bool>(
-      "common/time_sync_en", time_sync_en,
-      false);  // 是否需要时间同步，只有当外部未进行时间同步时设为true
+  // 是否发布当前正在扫描的点云
+  nh.param<bool>("publish/scan_publish_en", scan_pub_en, true);
+  // 是否发布经过运动畸变校正注册到IMU坐标系的点云
+  nh.param<bool>("publish/dense_publish_en", dense_pub_en, true);
+  // 是否发布经过运动畸变校正注册到IMU坐标系的点云，需要该变量和上一个变量同时为true才发布
+  nh.param<bool>("publish/scan_bodyframe_pub_en", scan_body_pub_en, true);
+  // 卡尔曼滤波的最大迭代次数
+  nh.param<int>("max_iteration", NUM_MAX_ITERATIONS, 4);
+  // 地图保存路径
+  nh.param<string>("map_file_path", map_file_path, "");
+
+  // 雷达点云topic名称
+  nh.param<string>("common/lid_topic", lid_topic, "/livox/lidar");
+  // IMU的topic名称
+  nh.param<string>("common/imu_topic", imu_topic, "/livox/imu");
+  // 是否需要时间同步，只有当外部未进行时间同步时设为true
+  nh.param<bool>("common/time_sync_en", time_sync_en, false);
   nh.param<double>("common/time_offset_lidar_to_imu", time_diff_lidar_to_imu,
                    0.0);
-  nh.param<double>("filter_size_corner", filter_size_corner_min,
-                   0.5);  // VoxelGrid降采样时的体素大小
+  // VoxelGrid降采样时的体素大小
+  nh.param<double>("filter_size_corner", filter_size_corner_min, 0.5);
   nh.param<double>("filter_size_surf", filter_size_surf_min, 0.5);
   nh.param<double>("filter_size_map", filter_size_map_min, 0.5);
-  nh.param<double>("cube_side_length", cube_len,
-                   200);  // 地图的局部区域的长度（FastLio2论文中有解释）
-  nh.param<float>("mapping/det_range", DET_RANGE,
-                  300.f);  // 激光雷达的最大探测范围
+
+  // 地图的局部区域的长度（FastLio2论文中有解释）
+  nh.param<double>("cube_side_length", cube_len, 200);
+  // 激光雷达的最大探测范围
+  nh.param<float>("mapping/det_range", DET_RANGE, 300.f);
   nh.param<double>("mapping/fov_degree", fov_deg, 180);
-  nh.param<double>("mapping/gyr_cov", gyr_cov, 0.1);  // IMU陀螺仪的协方差
-  nh.param<double>("mapping/acc_cov", acc_cov, 0.1);  // IMU加速度计的协方差
-  nh.param<double>("mapping/b_gyr_cov", b_gyr_cov,
-                   0.0001);  // IMU陀螺仪偏置的协方差
-  nh.param<double>("mapping/b_acc_cov", b_acc_cov,
-                   0.0001);  // IMU加速度计偏置的协方差
-  nh.param<double>("preprocess/blind", p_pre->blind,
-                   0.01);  // 最小距离阈值，即过滤掉0～blind范围内的点云
-  nh.param<int>("preprocess/lidar_type", p_pre->lidar_type,
-                AVIA);  // 激光雷达的类型
-  nh.param<int>("preprocess/scan_line", p_pre->N_SCANS,
-                16);  // 激光雷达扫描的线数（livox avia为6线）
+
+  // IMU陀螺仪的协方差
+  nh.param<double>("mapping/gyr_cov", gyr_cov, 0.1);
+  // IMU加速度计的协方差
+  nh.param<double>("mapping/acc_cov", acc_cov, 0.1);
+  // IMU陀螺仪偏置的协方差
+  nh.param<double>("mapping/b_gyr_cov", b_gyr_cov, 0.0001);
+  // IMU加速度计偏置的协方差
+  nh.param<double>("mapping/b_acc_cov", b_acc_cov, 0.0001);
+  // 最小距离阈值，即过滤掉0～blind范围内的点云
+  nh.param<double>("preprocess/blind", p_pre->blind, 0.01);
+  // 激光雷达的类型
+  nh.param<int>("preprocess/lidar_type", p_pre->lidar_type, AVIA);
+  // 激光雷达扫描的线数（livox avia为6线）
+  nh.param<int>("preprocess/scan_line", p_pre->N_SCANS, 16);
   nh.param<int>("preprocess/timestamp_unit", p_pre->time_unit, US);
   nh.param<int>("preprocess/scan_rate", p_pre->SCAN_RATE, 10);
-  nh.param<int>("point_filter_num", p_pre->point_filter_num,
-                2);  // 采样间隔，即每隔point_filter_num个点取1个点
-  nh.param<bool>("feature_extract_enable", p_pre->feature_enabled,
-                 false);  // 是否提取特征点（FAST_LIO2默认不进行特征点提取）
+  // 采样间隔，即每隔point_filter_num个点取1个点
+  nh.param<int>("point_filter_num", p_pre->point_filter_num, 2);
+  // 是否提取特征点（FAST_LIO2默认不进行特征点提取）
+  nh.param<bool>("feature_extract_enable", p_pre->feature_enabled, false);
   nh.param<bool>("mapping/extrinsic_est_en", extrinsic_est_en, true);
-  nh.param<bool>("pcd_save/pcd_save_en", pcd_save_en,
-                 false);  // 是否将点云地图保存到PCD文件
+  // 是否将点云地图保存到PCD文件
+  nh.param<bool>("pcd_save/pcd_save_en", pcd_save_en, false);
   nh.param<int>("pcd_save/interval", pcd_save_interval, -1);
-  nh.param<vector<double>>(
-      "mapping/extrinsic_T", extrinT,
-      vector<double>());  // 雷达相对于IMU的外参T（即雷达在IMU坐标系中的坐标）
-  nh.param<vector<double>>("mapping/extrinsic_R", extrinR,
-                           vector<double>());  // 雷达相对于IMU的外参R
+  // 雷达相对于IMU的外参T（即雷达在IMU坐标系中的坐标）
+  nh.param<vector<double>>("mapping/extrinsic_T", extrinT, vector<double>());
+  // 雷达相对于IMU的外参R
+  nh.param<vector<double>>("mapping/extrinsic_R", extrinR, vector<double>());
 
   cout << "Lidar_type: " << p_pre->lidar_type << endl;
   // 初始化path的header（包括时间戳和帧id），path用于保存odemetry的路径

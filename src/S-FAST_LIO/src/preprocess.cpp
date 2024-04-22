@@ -5,7 +5,7 @@
 
 Preprocess::Preprocess()
     : feature_enabled(0), lidar_type(AVIA), blind(0.01), point_filter_num(1) {
-  inf_bound = 10;
+  inf_bound = 10;  // 最远距离
   N_SCANS = 6;
   SCAN_RATE = 10;
   group_size = 8;
