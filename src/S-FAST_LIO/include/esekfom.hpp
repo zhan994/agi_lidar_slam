@@ -19,13 +19,14 @@ const double epsi = 0.001;  // ESKF迭代时，如果dx<epsi 认为收敛
 namespace esekfom {
 using namespace Eigen;
 
-PointCloudXYZI::Ptr normvec(new PointCloudXYZI(
-    100000,
-    1));  //特征点在地图中对应的平面参数(平面的单位法向量,以及当前点到平面距离)
-PointCloudXYZI::Ptr laserCloudOri(new PointCloudXYZI(100000, 1));  //有效特征点
-PointCloudXYZI::Ptr corr_normvect(
-    new PointCloudXYZI(100000, 1));      //有效特征点对应点法相量
-bool point_selected_surf[100000] = {1};  //判断是否是有效特征点
+// 特征点在地图中对应的平面参数(平面的单位法向量,以及当前点到平面距离)
+PointCloudXYZI::Ptr normvec(new PointCloudXYZI(100000, 1));
+// 有效特征点
+PointCloudXYZI::Ptr laserCloudOri(new PointCloudXYZI(100000, 1));
+// 有效特征点对应点法相量
+PointCloudXYZI::Ptr corr_normvect(new PointCloudXYZI(100000, 1));
+// 判断是否是有效特征点
+bool point_selected_surf[100000] = {1};
 
 struct dyn_share_datastruct {
   bool valid;     //有效特征点数量是否满足要求
@@ -311,8 +312,8 @@ class esekf {
   }
 
  private:
-  state_ikfom x_;
-  cov P_ = cov::Identity();
+  state_ikfom x_;            // 状态量
+  cov P_ = cov::Identity();  // 协方差矩阵
 };
 
 }  // namespace esekfom

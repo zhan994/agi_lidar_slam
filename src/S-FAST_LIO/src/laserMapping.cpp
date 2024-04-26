@@ -101,8 +101,14 @@ void SigHandle(int sig) {
   sig_buffer.notify_all();
 }
 
+/**
+ * \brief // api: sensor_msgs::PointCloud2点云回调
+ *
+ * \param msg 消息
+ */
 void standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr& msg) {
   mtx_buffer.lock();
+  // step: 1 计数，异常处理lidar_buffer数据
   scan_count++;
   double preprocess_start_time = omp_get_wtime();
   if (msg->header.stamp.toSec() < last_timestamp_lidar) {
@@ -110,6 +116,7 @@ void standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr& msg) {
     lidar_buffer.clear();
   }
 
+  // step: 2 处理当前回调数据
   PointCloudXYZI::Ptr ptr(new PointCloudXYZI());
   p_pre->process(msg, ptr);
   lidar_buffer.push_back(ptr);
@@ -121,9 +128,16 @@ void standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr& msg) {
 
 double timediff_lidar_wrt_imu = 0.0;
 bool timediff_set_flg = false;
+/**
+ * \brief // api: livox_ros_driver::CustomMsg点云回调
+ *
+ * \param msg 消息
+ */
 void livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr& msg) {
   mtx_buffer.lock();
   double preprocess_start_time = omp_get_wtime();
+
+  // step: 1 计数，异常处理lidar_buffer数据
   scan_count++;
   if (msg->header.stamp.toSec() < last_timestamp_lidar) {
     ROS_ERROR("lidar loop back, clear buffer");
@@ -131,12 +145,14 @@ void livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr& msg) {
   }
   last_timestamp_lidar = msg->header.stamp.toSec();
 
+  // step: 2 不时间同步，最新imu比雷达晚10s
   if (!time_sync_en && abs(last_timestamp_imu - last_timestamp_lidar) > 10.0 &&
       !imu_buffer.empty() && !lidar_buffer.empty()) {
     printf("IMU and LiDAR not Synced, IMU time: %lf, lidar header time: %lf \n",
            last_timestamp_imu, last_timestamp_lidar);
   }
 
+  // step: 3 时间同步，时间相差1s以上需要补偿
   if (time_sync_en && !timediff_set_flg &&
       abs(last_timestamp_lidar - last_timestamp_imu) > 1 &&
       !imu_buffer.empty()) {
@@ -146,39 +162,44 @@ void livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr& msg) {
            timediff_lidar_wrt_imu);
   }
 
+  // step: 4 处理当前回调数据
   PointCloudXYZI::Ptr ptr(new PointCloudXYZI());
   p_pre->process(msg, ptr);
   lidar_buffer.push_back(ptr);
   time_buffer.push_back(last_timestamp_lidar);
-
   mtx_buffer.unlock();
   sig_buffer.notify_all();
 }
 
+/**
+ * \brief // api: IMU回调函数
+ *
+ * \param msg_in 消息
+ */
 void imu_cbk(const sensor_msgs::Imu::ConstPtr& msg_in) {
+  // step: 1 计数并实例数据
   publish_count++;
   // cout<<"IMU got at: "<<msg_in->header.stamp.toSec()<<endl;
   sensor_msgs::Imu::Ptr msg(new sensor_msgs::Imu(*msg_in));
 
+  // step: 2 imu和雷达时间同步
   if (abs(timediff_lidar_wrt_imu) > 0.1 && time_sync_en) {
     msg->header.stamp = ros::Time().fromSec(timediff_lidar_wrt_imu +
                                             msg_in->header.stamp.toSec());
   }
-
   msg->header.stamp = ros::Time().fromSec(msg_in->header.stamp.toSec() -
                                           time_diff_lidar_to_imu);
-
   double timestamp = msg->header.stamp.toSec();
 
+  // step: 3 异常处理imu_buffer的数据
   mtx_buffer.lock();
-
   if (timestamp < last_timestamp_imu) {
     ROS_WARN("imu loop back, clear buffer");
     imu_buffer.clear();
   }
 
+  // step: 4 处理当前回调数据
   last_timestamp_imu = timestamp;
-
   imu_buffer.push_back(msg);
   mtx_buffer.unlock();
   sig_buffer.notify_all();
@@ -186,16 +207,27 @@ void imu_cbk(const sensor_msgs::Imu::ConstPtr& msg_in) {
 
 double lidar_mean_scantime = 0.0;
 int scan_num = 0;
-//把当前要处理的LIDAR和IMU数据打包到meas
+
+/**
+ * \brief // api: 把当前要处理的LIDAR和IMU数据打包到meas
+ *
+ * \param meas 返回打包的数据
+ * \return true
+ * \return false
+ */
 bool sync_packages(MeasureGroup& meas) {
+  // step: 1 判断是否有数据需要打包
   if (lidar_buffer.empty() || imu_buffer.empty()) {
     return false;
   }
 
-  /*** push a lidar scan ***/
+  // step: 2 push a lidar scan
   if (!lidar_pushed) {
+    // step: 2.1 记录点云以及起始时间
     meas.lidar = lidar_buffer.front();
     meas.lidar_beg_time = time_buffer.front();
+
+    // step: 2.2 统计点云终止时间
     if (meas.lidar->points.size() <= 5)  // time too little
     {
       lidar_end_time = meas.lidar_beg_time + lidar_mean_scantime;
@@ -207,26 +239,27 @@ bool sync_packages(MeasureGroup& meas) {
       scan_num++;
       lidar_end_time = meas.lidar_beg_time +
                        meas.lidar->points.back().curvature / double(1000);
+      // note: curvature中存储的是相对第一个点的时间
       lidar_mean_scantime +=
           (meas.lidar->points.back().curvature / double(1000) -
            lidar_mean_scantime) /
-          scan_num;  //注意curvature中存储的是相对第一个点的时间
+          scan_num;
     }
 
+    // step: 2.3 记录终止时间，并标记已加入点云数据
     meas.lidar_end_time = lidar_end_time;
-
     lidar_pushed = true;
   }
 
-  if (last_timestamp_imu <
-      lidar_end_time)  //如果最新的imu时间戳都<雷达最终的时间，证明还没有收集足够的imu数据，break
-  {
+  // step: 3 最新的imu时间戳<雷达最终的时间，证明还没有足够的imu数据
+  if (last_timestamp_imu < lidar_end_time) {
     return false;
   }
 
-  /*** push imu data, and pop from imu buffer ***/
+  // step: 4 push imu data, and pop from imu buffer
   double imu_time = imu_buffer.front()->header.stamp.toSec();
   meas.imu.clear();
+  // note: 保存雷达终止时间前的一个imu数据
   while ((!imu_buffer.empty()) && (imu_time < lidar_end_time)) {
     imu_time = imu_buffer.front()->header.stamp.toSec();
     if (imu_time > lidar_end_time) break;
@@ -234,6 +267,7 @@ bool sync_packages(MeasureGroup& meas) {
     imu_buffer.pop_front();
   }
 
+  // step: 5 pop_front雷达相关数据
   lidar_buffer.pop_front();
   time_buffer.pop_front();
   lidar_pushed = false;
@@ -601,12 +635,15 @@ int main(int argc, char** argv) {
   path.header.stamp = ros::Time::now();
   path.header.frame_id = "camera_init";
 
+  // step: 2 订阅
   /*** ROS subscribe initialization ***/
   ros::Subscriber sub_pcl =
       p_pre->lidar_type == AVIA
           ? nh.subscribe(lid_topic, 200000, livox_pcl_cbk)
           : nh.subscribe(lid_topic, 200000, standard_pcl_cbk);
   ros::Subscriber sub_imu = nh.subscribe(imu_topic, 200000, imu_cbk);
+
+  // step: 3 发布
   ros::Publisher pubLaserCloudFull =
       nh.advertise<sensor_msgs::PointCloud2>("/cloud_registered", 100000);
   ros::Publisher pubLaserCloudFull_body =
@@ -619,11 +656,13 @@ int main(int argc, char** argv) {
       nh.advertise<nav_msgs::Odometry>("/Odometry", 100000);
   ros::Publisher pubPath = nh.advertise<nav_msgs::Path>("/path", 100000);
 
+  // step: 4 下采样参数
   downSizeFilterSurf.setLeafSize(filter_size_surf_min, filter_size_surf_min,
                                  filter_size_surf_min);
   downSizeFilterMap.setLeafSize(filter_size_map_min, filter_size_map_min,
                                 filter_size_map_min);
 
+  // step: 5 ImuProcess和外参输入
   shared_ptr<ImuProcess> p_imu1(new ImuProcess());
   Lidar_T_wrt_IMU << VEC_FROM_ARRAY(extrinT);
   Lidar_R_wrt_IMU << MAT_FROM_ARRAY(extrinR);
@@ -632,18 +671,20 @@ int main(int argc, char** argv) {
       V3D(acc_cov, acc_cov, acc_cov), V3D(b_gyr_cov, b_gyr_cov, b_gyr_cov),
       V3D(b_acc_cov, b_acc_cov, b_acc_cov));
 
-  signal(SIGINT, SigHandle);  //当程序检测到signal信号（例如ctrl+c） 时  执行
-                              // SigHandle 函数
+  // note: 当程序检测到signal信号（例如ctrl+c）时执行SigHandle 函数
+  signal(SIGINT, SigHandle);
   ros::Rate rate(5000);
 
+  // step: 6 主循环
   while (ros::ok()) {
     if (flg_exit) break;
     ros::spinOnce();
 
-    if (sync_packages(Measures))  //把一次的IMU和LIDAR数据打包到Measures
-    {
+    // step: 6.1 把一次的IMU和LIDAR数据打包到Measures
+    if (sync_packages(Measures)) {
       double t00 = omp_get_wtime();
 
+      // step: 6.1.1 判断是否为第一帧
       if (flg_first_scan) {
         first_lidar_time = Measures.lidar_beg_time;
         p_imu1->first_lidar_time = first_lidar_time;
@@ -651,9 +692,10 @@ int main(int argc, char** argv) {
         continue;
       }
 
+      // step: 6.1.2 处理IMU数据
       p_imu1->Process(Measures, kf, feats_undistort);
 
-      //如果feats_undistort为空 ROS_WARN
+      // step: 6.1.3 如果feats_undistort为空 ROS_WARN
       if (feats_undistort->empty() || (feats_undistort == NULL)) {
         ROS_WARN("No point, skip this scan!\n");
         continue;

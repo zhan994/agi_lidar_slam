@@ -123,7 +123,13 @@ void ImuProcess::set_param(const V3D& transl, const M3D& rot, const V3D& gyr,
   cov_bias_acc = acc_bias;
 }
 
-// IMU初始化：利用开始的IMU帧的平均值初始化状态量x
+/**
+ * \brief // api: IMU初始化：利用开始的IMU帧的平均值初始化状态量x
+ *
+ * \param meas 打包好的数据
+ * \param kf_state 初始化的状态
+ * \param N 初始化帧数
+ */
 void ImuProcess::IMU_init(const MeasureGroup& meas, esekfom::esekf& kf_state,
                           int& N) {
   // MeasureGroup这个struct表示当前过程中正在处理的所有数据，包含IMU队列和一帧lidar的点云
@@ -188,7 +194,13 @@ void ImuProcess::IMU_init(const MeasureGroup& meas, esekfom::esekf& kf_state,
   // init_state.bg <<" " << init_state.ba <<" " << init_state.grav << std::endl;
 }
 
-//反向传播
+/**
+ * \brief // api: 前 & 反向传播
+ *
+ * \param meas
+ * \param kf_state
+ * \param pcl_out
+ */
 void ImuProcess::UndistortPcl(const MeasureGroup& meas,
                               esekfom::esekf& kf_state,
                               PointCloudXYZI& pcl_out) {
@@ -342,23 +354,28 @@ void ImuProcess::UndistortPcl(const MeasureGroup& meas,
 }
 
 double T1, T2;
+/**
+ * \brief // api: 前向传播和运动补偿
+ *
+ * \param meas 打包好的imu和雷达数据
+ * \param kf_state 前向状态估计
+ * \param cur_pcl_un_ 运动补偿去畸变
+ */
 void ImuProcess::Process(const MeasureGroup& meas, esekfom::esekf& kf_state,
                          PointCloudXYZI::Ptr& cur_pcl_un_) {
   // T1 = omp_get_wtime();
-
+  // step: 1 保证有imu数据
   if (meas.imu.empty()) {
     return;
   };
   ROS_ASSERT(meas.lidar != nullptr);
 
   if (imu_need_init_) {
-    // The very first lidar frame
-    IMU_init(meas, kf_state, init_iter_num);  //如果开头几帧  需要初始化IMU参数
-
+    // step: 2 The very first lidar frame初始化
+    IMU_init(meas, kf_state, init_iter_num);
     imu_need_init_ = true;
 
     last_imu_ = meas.imu.back();
-
     state_ikfom imu_state = kf_state.get_x();
 
     if (init_iter_num > MAX_INI_COUNT) {

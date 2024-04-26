@@ -829,13 +829,14 @@ bool Preprocess::edge_jump_judge(const PointCloudXYZI& pl,
 
 void Preprocess::rs_handler(
     const sensor_msgs::PointCloud2_<allocator<void>>::ConstPtr& msg) {
+  // step: 1 转为pcl格式
   pl_surf.clear();
-
   pcl::PointCloud<rslidar_ros::Point> pl_orig;
   pcl::fromROSMsg(*msg, pl_orig);
   int plsize = pl_orig.points.size();
   pl_surf.reserve(plsize);
 
+  // note: 没有时间戳时使用
   /*** These variables only works when no point timestamps given ***/
   double omega_l = 0.361 * SCAN_RATE;  // scan angular velocity
   std::vector<bool> is_first(N_SCANS, true);
@@ -844,31 +845,31 @@ void Preprocess::rs_handler(
   std::vector<float> time_last(N_SCANS, 0.0);  // last offset time
   /*****************************************************************/
 
-  if (pl_orig.points[plsize - 1].timestamp >
-      0)  // todo check pl_orig.points[plsize - 1].time
-  {
+  // step: 2 check pl_orig.points[plsize - 1].time
+  if (pl_orig.points[plsize - 1].timestamp > 0) {
     given_offset_time = true;
     // std::cout << "given_offset_time = true " << std::endl;
   } else {
     given_offset_time = false;
-    double yaw_first = atan2(pl_orig.points[0].y, pl_orig.points[0].x) *
-                       57.29578;  // 记录第一个点(index 0)的yaw， to degree
+    // 记录第一个点(index 0)的yaw， to degree
+    double yaw_first =
+        atan2(pl_orig.points[0].y, pl_orig.points[0].x) * 57.29578;
     double yaw_end = yaw_first;
     int layer_first = pl_orig.points[0].ring;  // 第一个点(index 0)的layer序号
-    for (uint i = plsize - 1; i > 0;
-         i--)  // 倒序遍历，找到与第一个点相同layer的最后一个点
-    {
+    // 倒序遍历，找到与第一个点相同layer的最后一个点
+    for (uint i = plsize - 1; i > 0; i--) {
       if (pl_orig.points[i].ring == layer_first) {
-        yaw_end = atan2(pl_orig.points[i].y, pl_orig.points[i].x) *
-                  57.29578;  // 与第一个点相同layer的最后一个点的yaw
+        // 与第一个点相同layer的最后一个点的yaw
+        yaw_end = atan2(pl_orig.points[i].y, pl_orig.points[i].x) * 57.29578;
         break;
       }
     }
   }
 
+  // step: 3 遍历点云进行数据转换
   for (int i = 0; i < plsize; i++) {
+    // step: 3.1 新建点
     PointType added_pt;
-
     added_pt.normal_x = 0;
     added_pt.normal_y = 0;
     added_pt.normal_z = 0;
@@ -876,11 +877,13 @@ void Preprocess::rs_handler(
     added_pt.y = pl_orig.points[i].y;
     added_pt.z = pl_orig.points[i].z;
     added_pt.intensity = pl_orig.points[i].intensity;
+    // note: 存储相对第一个点的时间
     added_pt.curvature =
         (pl_orig.points[i].timestamp - pl_orig.points[0].timestamp) *
         1000.0;  // curvature unit: ms
     // std::cout << "added_pt.curvature:" << added_pt.curvature << std::endl;
 
+    // step: 3.2 处理没有时间戳的情况
     if (!given_offset_time) {
       int layer = pl_orig.points[i].ring;
       double yaw_angle = atan2(added_pt.y, added_pt.x) * 57.2957;
@@ -909,6 +912,7 @@ void Preprocess::rs_handler(
       time_last[layer] = added_pt.curvature;
     }
 
+    // step: 3.3 下采样并判断盲区
     if (i % point_filter_num == 0) {
       if (added_pt.x * added_pt.x + added_pt.y * added_pt.y +
               added_pt.z * added_pt.z >
