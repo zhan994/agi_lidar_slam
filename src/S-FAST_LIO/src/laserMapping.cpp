@@ -684,7 +684,7 @@ int main(int argc, char** argv) {
     if (sync_packages(Measures)) {
       double t00 = omp_get_wtime();
 
-      // step: 6.1.1 判断是否为第一帧
+      // step: 6.2 判断是否为第一帧
       if (flg_first_scan) {
         first_lidar_time = Measures.lidar_beg_time;
         p_imu1->first_lidar_time = first_lidar_time;
@@ -692,26 +692,25 @@ int main(int argc, char** argv) {
         continue;
       }
 
-      // step: 6.1.2 处理IMU数据
+      // step: 6.3 处理IMU数据
       p_imu1->Process(Measures, kf, feats_undistort);
 
-      // step: 6.1.3 如果feats_undistort为空 ROS_WARN
+      // step: 6.4 如果feats_undistort为空 ROS_WARN
       if (feats_undistort->empty() || (feats_undistort == NULL)) {
         ROS_WARN("No point, skip this scan!\n");
         continue;
       }
 
+      // step: 6.5 获取当前估计的状态，雷达的位置
       state_point = kf.get_x();
       pos_lid =
           state_point.pos + state_point.rot.matrix() * state_point.offset_T_L_I;
-
       flg_EKF_inited = (Measures.lidar_beg_time - first_lidar_time) < INIT_TIME
                            ? false
                            : true;
 
-      lasermap_fov_segment();  //更新localmap边界，然后降采样当前帧点云
-
-      //点云下采样
+      // step: 6.6 更新localmap边界，然后降采样当前帧点云
+      lasermap_fov_segment();
       downSizeFilterSurf.setInputCloud(feats_undistort);
       downSizeFilterSurf.filter(*feats_down_body);
       feats_down_size = feats_down_body->points.size();
