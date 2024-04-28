@@ -69,7 +69,13 @@ class esekf {
     return x_r;
   }
 
-  //前向传播  公式(4-8)
+  /**
+   * \brief // api: 前向传播  公式(4-8)
+   *
+   * \param dt
+   * \param Q
+   * \param i_in
+   */
   void predict(double& dt, Eigen::Matrix<double, 12, 12>& Q,
                const input_ikfom& i_in) {
     Eigen::Matrix<double, 24, 1> f_ = get_f(x_, i_in);     //公式(3)的f
