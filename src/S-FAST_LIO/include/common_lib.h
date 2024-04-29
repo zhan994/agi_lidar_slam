@@ -36,8 +36,8 @@ M3F Eye3f(M3F::Identity());
 V3D Zero3d(0, 0, 0);
 V3F Zero3f(0, 0, 0);
 
-struct MeasureGroup  // Lidar data and imu dates for the current process
-{
+// Lidar data and imu dates for the current process
+struct MeasureGroup {
   MeasureGroup() {
     lidar_beg_time = 0.0;
     this->lidar.reset(new PointCloudXYZI());
@@ -48,6 +48,18 @@ struct MeasureGroup  // Lidar data and imu dates for the current process
   deque<sensor_msgs::Imu::ConstPtr> imu;
 };
 
+/**
+ * \brief // api: Set the pose6d object
+ *
+ * \tparam T
+ * \param t 时间间隔
+ * \param a 加速度
+ * \param g 角速度
+ * \param v 速度
+ * \param p 位置
+ * \param R 姿态
+ * \return auto Pose6D
+ */
 template <typename T>
 auto set_pose6d(const double t, const Matrix<T, 3, 1>& a,
                 const Matrix<T, 3, 1>& g, const Matrix<T, 3, 1>& v,
@@ -64,12 +76,29 @@ auto set_pose6d(const double t, const Matrix<T, 3, 1>& a,
   return move(rot_kp);
 }
 
+/**
+ * \brief // api: 计算两点之间距离
+ *
+ * \param p1
+ * \param p2
+ * \return float
+ */
 float calc_dist(PointType p1, PointType p2) {
   float d = (p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y) +
             (p1.z - p2.z) * (p1.z - p2.z);
   return d;
 }
 
+/**
+ * \brief // api: 平面估计
+ *
+ * \tparam T
+ * \param pca_result 平面方程参数
+ * \param point 平面上的点
+ * \param threshold 点到平面距离阈值
+ * \return true
+ * \return false
+ */
 template <typename T>
 bool esti_plane(Matrix<T, 4, 1>& pca_result, const PointVector& point,
                 const T& threshold) {
@@ -79,23 +108,22 @@ bool esti_plane(Matrix<T, 4, 1>& pca_result, const PointVector& point,
   b.setOnes();
   b *= -1.0f;
 
-  //求A/Dx + B/Dy + C/Dz + 1 = 0 的参数
+  // step: 1 求A/Dx + B/Dy + C/Dz + 1 = 0 的参数
   for (int j = 0; j < NUM_MATCH_POINTS; j++) {
     A(j, 0) = point[j].x;
     A(j, 1) = point[j].y;
     A(j, 2) = point[j].z;
   }
 
+  // note: pca_result是平面方程的4个参数  /n是为了归一化
   Matrix<T, 3, 1> normvec = A.colPivHouseholderQr().solve(b);
-
   T n = normvec.norm();
-  // pca_result是平面方程的4个参数  /n是为了归一化
   pca_result(0) = normvec(0) / n;
   pca_result(1) = normvec(1) / n;
   pca_result(2) = normvec(2) / n;
   pca_result(3) = 1.0 / n;
 
-  //如果几个点中有距离该平面>threshold的点 认为是不好的平面 返回false
+  // step: 2 如果几个点中有距离该平面>threshold的点 认为是不好的平面返回false
   for (int j = 0; j < NUM_MATCH_POINTS; j++) {
     if (fabs(pca_result(0) * point[j].x + pca_result(1) * point[j].y +
              pca_result(2) * point[j].z + pca_result(3)) > threshold) {

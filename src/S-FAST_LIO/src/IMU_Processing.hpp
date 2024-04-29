@@ -302,6 +302,7 @@ void ImuProcess::UndistortPcl(const MeasureGroup& meas,
 
     // step: 4.1.3 计算dt
     // 如果IMU开始时刻早于上次雷达最晚时刻(因为将上次最后一个IMU插入到此次开头了，所以会出现一次这种情况)
+    // note: 初始化结束后的last_lidar_end_time_未赋值？？？
     if (head->header.stamp.toSec() < last_lidar_end_time_) {
       //从上次雷达时刻末尾开始传播计算与此次IMU结尾之间的时间差
       dt = tail->header.stamp.toSec() - last_lidar_end_time_;
