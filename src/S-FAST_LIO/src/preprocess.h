@@ -193,9 +193,9 @@ class Preprocess
   void velodyne_handler(const sensor_msgs::PointCloud2::ConstPtr &msg);
 
   /**
-   * \brief 
+   * \brief // api: 特征提取
    * 
-   * \param pl 
+   * \param pl 点云
    * \param types 
    */
   void give_feature(PointCloudXYZI &pl, vector<orgtype> &types);
