@@ -692,7 +692,7 @@ int main(int argc, char** argv) {
         continue;
       }
 
-      // step: 6.3 处理IMU数据
+      // step: 6.3 处理IMU数据，更新状态量kf，以及补偿点云
       p_imu1->Process(Measures, kf, feats_undistort);
 
       // step: 6.4 如果feats_undistort为空 ROS_WARN
@@ -714,24 +714,23 @@ int main(int argc, char** argv) {
       downSizeFilterSurf.setInputCloud(feats_undistort);
       downSizeFilterSurf.filter(*feats_down_body);
       feats_down_size = feats_down_body->points.size();
-
       // std::cout << "feats_down_size :" << feats_down_size << std::endl;
       if (feats_down_size < 5) {
         ROS_WARN("No point, skip this scan!\n");
         continue;
       }
 
-      //初始化ikdtree(ikdtree为空时)
+      // step: 6.7 初始化ikdtree(ikdtree为空时)
       if (ikdtree.Root_Node == nullptr) {
         ikdtree.set_downsample_param(filter_size_map_min);
         feats_down_world->resize(feats_down_size);
         for (int i = 0; i < feats_down_size; i++) {
-          pointBodyToWorld(
-              &(feats_down_body->points[i]),
-              &(feats_down_world->points[i]));  // lidar坐标系转到世界坐标系
+          // lidar坐标系转到世界坐标系
+          pointBodyToWorld(&(feats_down_body->points[i]),
+                           &(feats_down_world->points[i]));
         }
-        ikdtree.Build(
-            feats_down_world->points);  //根据世界坐标系下的点构建ikdtree
+        //根据世界坐标系下的点构建ikdtree
+        ikdtree.Build(feats_down_world->points);
         continue;
       }
 
@@ -745,7 +744,7 @@ int main(int argc, char** argv) {
         // std::endl;
       }
 
-      /*** iterated state estimation ***/
+      // step: 6.8 ieskf
       Nearest_Points.resize(feats_down_size);  //存储近邻点的vector
       kf.update_iterated_dyn_share_modified(
           LASER_POINT_COV, feats_down_body, ikdtree, Nearest_Points,
@@ -755,14 +754,12 @@ int main(int argc, char** argv) {
       pos_lid =
           state_point.pos + state_point.rot.matrix() * state_point.offset_T_L_I;
 
-      /******* Publish odometry *******/
+      // step: 6.9 发布odom
       publish_odometry(pubOdomAftMapped);
 
-      /*** add the feature points to map kdtree ***/
+      // step: 6.10 地图更新以及点云发布
       feats_down_world->resize(feats_down_size);
       map_incremental();
-
-      /******* Publish points *******/
       if (path_en) publish_path(pubPath);
       if (scan_pub_en || pcd_save_en) publish_frame_world(pubLaserCloudFull);
       if (scan_pub_en && scan_body_pub_en)
@@ -779,7 +776,7 @@ int main(int argc, char** argv) {
     rate.sleep();
   }
 
-  /**************** save map ****************/
+  // step: 7 地图保存
   /* 1. make sure you have enough memories
   /* 2. pcd save will largely influence the real-time performences **/
   if (pcl_wait_save->size() > 0 && pcd_save_en) {
