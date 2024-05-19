@@ -28,12 +28,15 @@ PointCloudXYZI::Ptr corr_normvect(new PointCloudXYZI(100000, 1));
 // 判断是否是有效特征点
 bool point_selected_surf[100000] = {1};
 
+// IESKF关键参数
 struct dyn_share_datastruct {
-  bool valid;     //有效特征点数量是否满足要求
-  bool converge;  //迭代时，是否已经收敛
-  Eigen::Matrix<double, Eigen::Dynamic, 1> h;  //残差	(公式(14)中的z)
-  Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>
-      h_x;  //雅可比矩阵H (公式(14)中的H)
+  bool valid;     // 有效特征点数量是否满足要求
+  bool converge;  // 迭代时，是否已经收敛
+
+  // 残差	(公式(14)中的z)
+  Eigen::Matrix<double, Eigen::Dynamic, 1> h;
+  // 雅可比矩阵H (公式(14)中的H)
+  Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> h_x;
 };
 
 class esekf {
@@ -91,7 +94,15 @@ class esekf {
          (dt * f_w_) * Q * (dt * f_w_).transpose();  //传播协方差矩阵，即公式(8)
   }
 
-  //计算每个特征点的残差及H矩阵
+  /**
+   * \brief // api: 计算每个特征点的残差及H矩阵
+   *
+   * \param ekfom_data ieskf相关参数
+   * \param feats_down_body 特征点
+   * \param ikdtree
+   * \param Nearest_Points 近邻点
+   * \param extrinsic_est 是否估计外参
+   */
   void h_share_model(dyn_share_datastruct& ekfom_data,
                      PointCloudXYZI::Ptr& feats_down_body,
                      KD_TREE<PointType>& ikdtree,
@@ -105,13 +116,15 @@ class esekf {
 #pragma omp parallel for
 #endif
 
+    // step: 1 提取有效特征点，以及平面残差
     for (int i = 0; i < feats_down_size; i++)  //遍历所有的特征点
     {
+      // step: 1.1 把Lidar坐标系的点先转到IMU坐标系
       PointType& point_body = feats_down_body->points[i];
       PointType point_world;
-
       V3D p_body(point_body.x, point_body.y, point_body.z);
-      //把Lidar坐标系的点先转到IMU坐标系，再根据前向传播估计的位姿x，转到世界坐标系
+
+      // step: 1.2 再根据前向传播估计的位姿x，转到世界坐标系
       V3D p_global(x_.rot * (x_.offset_R_L_I * p_body + x_.offset_T_L_I) +
                    x_.pos);
       point_world.x = p_global(0);
@@ -120,43 +133,39 @@ class esekf {
       point_world.intensity = point_body.intensity;
 
       vector<float> pointSearchSqDis(NUM_MATCH_POINTS);
-      auto& points_near = Nearest_Points
-          [i];  // Nearest_Points[i]打印出来发现是按照离point_world距离，从小到大的顺序的vector
-
+      auto& points_near = Nearest_Points[i];
       double ta = omp_get_wtime();
       if (ekfom_data.converge) {
-        //寻找point_world的最近邻的平面点
+        // step: 1.3 寻找point_world的最近邻的平面点
         ikdtree.Nearest_Search(point_world, NUM_MATCH_POINTS, points_near,
                                pointSearchSqDis);
-        //判断是否是有效匹配点，与loam系列类似，要求特征点最近邻的地图点数量>阈值，距离<阈值
-        //满足条件的才置为true
+        // step: 1.4 判断是否是有效匹配点，与loam系列类似
+        // note: 要求特征点最近邻的地图点数量>阈值，距离<阈值
         point_selected_surf[i] =
             points_near.size() < NUM_MATCH_POINTS
                 ? false
                 : pointSearchSqDis[NUM_MATCH_POINTS - 1] > 5 ? false : true;
       }
-      if (!point_selected_surf[i])
-        continue;  //如果该点不满足条件  不进行下面步骤
+      //如果该点不满足条件  不进行下面步骤
+      if (!point_selected_surf[i]) continue;
 
-      Matrix<float, 4, 1> pabcd;  //平面点信息
-      point_selected_surf[i] =
-          false;  //将该点设置为无效点，用来判断是否满足条件
-      //拟合平面方程ax+by+cz+d=0并求解点到平面距离
+      // step: 1.5 拟合平面，判断点到平面距离，根据相关距离判断是否有效
+      Matrix<float, 4, 1> pabcd;  // 平面点信息
+      // 将该点设置为无效点，用来判断是否满足条件
+      point_selected_surf[i] = false;
+      // 拟合平面方程ax+by+cz+d=0并求解点到平面距离
       if (esti_plane(pabcd, points_near, 0.1f)) {
+        //当前点到平面的距离
         float pd2 = pabcd(0) * point_world.x + pabcd(1) * point_world.y +
-                    pabcd(2) * point_world.z + pabcd(3);  //当前点到平面的距离
-        float s =
-            1 -
-            0.9 * fabs(pd2) /
-                sqrt(p_body.norm());  //如果残差大于经验阈值，则认为该点是有效点
-                                      //简言之，距离原点越近的lidar点
-                                      //要求点到平面的距离越苛刻
-
+                    pabcd(2) * point_world.z + pabcd(3);
+        // 如果残差大于经验阈值，则认为该点是有效点，简言之，距离原点越近的lidar点，
+        // 要求点到平面的距离越苛刻
+        float s = 1 - 0.9 * fabs(pd2) / sqrt(p_body.norm());
         if (s > 0.9)  //如果残差大于阈值，则认为该点是有效点
         {
           point_selected_surf[i] = true;
-          normvec->points[i].x =
-              pabcd(0);  //存储平面的单位法向量  以及当前点到平面距离
+          // 存储平面的单位法向量  以及当前点到平面距离
+          normvec->points[i].x = pabcd(0);
           normvec->points[i].y = pabcd(1);
           normvec->points[i].z = pabcd(2);
           normvec->points[i].intensity = pd2;
@@ -164,14 +173,13 @@ class esekf {
       }
     }
 
-    int effct_feat_num = 0;  //有效特征点的数量
+    // step: 2 有效特征点统计
+    int effct_feat_num = 0;  // 有效特征点的数量
     for (int i = 0; i < feats_down_size; i++) {
-      if (point_selected_surf[i])  //对于满足要求的点
-      {
-        laserCloudOri->points[effct_feat_num] =
-            feats_down_body->points[i];  //把这些点重新存到laserCloudOri中
-        corr_normvect->points[effct_feat_num] =
-            normvec->points[i];  //存储这些点对应的法向量和到平面的距离
+      // 对于满足要求的点，把这些点重新存到laserCloudOri中，存储这些点对应的法向量和到平面的距离
+      if (point_selected_surf[i]) {
+        laserCloudOri->points[effct_feat_num] = feats_down_body->points[i];
+        corr_normvect->points[effct_feat_num] = normvec->points[i];
         effct_feat_num++;
       }
     }
@@ -182,7 +190,7 @@ class esekf {
       return;
     }
 
-    // 雅可比矩阵H和残差向量的计算
+    // step: 3 雅可比矩阵H和残差向量的计算
     ekfom_data.h_x = MatrixXd::Zero(effct_feat_num, 12);
     ekfom_data.h.resize(effct_feat_num);
 
@@ -211,87 +219,106 @@ class esekf {
             VEC_FROM_ARRAY(A), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
       }
 
-      //残差：点面距离
+      // 残差：点面距离
       ekfom_data.h(i) = -norm_p.intensity;
     }
   }
 
-  //广义减法
+  /**
+   * \brief // api: 广义减法
+   *
+   * \param x1
+   * \param x2
+   * \return vectorized_state
+   */
   vectorized_state boxminus(state_ikfom x1, state_ikfom x2) {
     vectorized_state x_r = vectorized_state::Zero();
 
+    // 位置
     x_r.block<3, 1>(0, 0) = x1.pos - x2.pos;
-
+    // 姿态
     x_r.block<3, 1>(3, 0) =
         Sophus::SO3(x2.rot.matrix().transpose() * x1.rot.matrix()).log();
     x_r.block<3, 1>(6, 0) = Sophus::SO3(x2.offset_R_L_I.matrix().transpose() *
                                         x1.offset_R_L_I.matrix())
                                 .log();
-
+    // 外参
     x_r.block<3, 1>(9, 0) = x1.offset_T_L_I - x2.offset_T_L_I;
+    //速度
     x_r.block<3, 1>(12, 0) = x1.vel - x2.vel;
+    // 零偏
     x_r.block<3, 1>(15, 0) = x1.bg - x2.bg;
     x_r.block<3, 1>(18, 0) = x1.ba - x2.ba;
+    // 重力
     x_r.block<3, 1>(21, 0) = x1.grav - x2.grav;
 
     return x_r;
   }
 
-  // ESKF
+  /**
+   * \brief  // api: ESKF更新
+   *
+   * \param R 观测协方差矩阵
+   * \param feats_down_body 特征点
+   * \param ikdtree
+   * \param Nearest_Points 近邻点
+   * \param maximum_iter 最大迭代次数
+   * \param extrinsic_est 是否估计外参
+   */
   void update_iterated_dyn_share_modified(double R,
                                           PointCloudXYZI::Ptr& feats_down_body,
                                           KD_TREE<PointType>& ikdtree,
                                           vector<PointVector>& Nearest_Points,
                                           int maximum_iter,
                                           bool extrinsic_est) {
+    // step: 1 初始化特征点的平面参数列表
     normvec->resize(int(feats_down_body->points.size()));
 
+    // step: 2 初始化IESKF状态参数
     dyn_share_datastruct dyn_share;
     dyn_share.valid = true;
     dyn_share.converge = true;
     int t = 0;
-    state_ikfom x_propagated =
-        x_;  //这里的x_和P_分别是经过正向传播后的状态量和协方差矩阵，因为会先调用predict函数再调用这个函数
+
+    // step: 3 x_和P_分别是经过正向传播后的状态量和协方差矩阵
+    // note: 先调用predict函数再调用这个函数
+    state_ikfom x_propagated = x_;
     cov P_propagated = P_;
 
+    // step: 4 IESKF迭代更新
     vectorized_state dx_new = vectorized_state::Zero();  // 24X1的向量
-
-    for (int i = -1; i < maximum_iter;
-         i++)  // maximum_iter是卡尔曼滤波的最大迭代次数
-    {
+    for (int i = -1; i < maximum_iter; i++) {
       dyn_share.valid = true;
-      // 计算雅克比，也就是点面残差的导数 H(代码里是h_x)
+      // step: 4.1 计算雅克比，点面残差的导数H(代码里是h_x)
       h_share_model(dyn_share, feats_down_body, ikdtree, Nearest_Points,
                     extrinsic_est);
-
       if (!dyn_share.valid) {
         continue;
       }
 
-      vectorized_state dx;
-      dx_new = boxminus(x_, x_propagated);  //公式(18)中的 x^k - x^
-
-      //由于H矩阵是稀疏的，只有前12列有非零元素，后12列是零
-      //因此这里采用分块矩阵的形式计算 减少计算量
-      auto H = dyn_share.h_x;  // m X 12 的矩阵
-      Eigen::Matrix<double, 24, 24> HTH =
-          Matrix<double, 24, 24>::Zero();  //矩阵 H^T * H
+      // step: 4.2 公式(18)
+      // \hat{x}^{\kappa} - \hat{x}，
+      dx_new = boxminus(x_, x_propagated);
+      // note: H矩阵稀疏，前12列有非零元素，采用分块矩阵计算减少计算量
+      // m X 12 的矩阵
+      auto H = dyn_share.h_x;
+      // 矩阵 H^T * H
+      Eigen::Matrix<double, 24, 24> HTH = Matrix<double, 24, 24>::Zero();
       HTH.block<12, 12>(0, 0) = H.transpose() * H;
 
       auto K_front = (HTH / R + P_.inverse()).inverse();
       Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> K;
-      K = K_front.block<24, 12>(0, 0) * H.transpose() /
-          R;  //卡尔曼增益  这里R视为常数
-
-      Eigen::Matrix<double, 24, 24> KH =
-          Matrix<double, 24, 24>::Zero();  //矩阵 K * H
+      // 卡尔曼增益  这里R视为常数
+      K = K_front.block<24, 12>(0, 0) * H.transpose() / R;
+      // 矩阵 K * H
+      Eigen::Matrix<double, 24, 24> KH = Matrix<double, 24, 24>::Zero();
       KH.block<24, 12>(0, 0) = K * H;
       Matrix<double, 24, 1> dx_ =
-          K * dyn_share.h +
-          (KH - Matrix<double, 24, 24>::Identity()) * dx_new;  //公式(18)
+          K * dyn_share.h + (KH - Matrix<double, 24, 24>::Identity()) * dx_new;
       // std::cout << "dx_: " << dx_.transpose() << std::endl;
-      x_ = boxplus(x_, dx_);  //公式(18)
+      x_ = boxplus(x_, dx_);  // 公式(18)
 
+      // step: 4.3 判断是否收敛
       dyn_share.converge = true;
       for (int j = 0; j < 24; j++) {
         if (std::fabs(dx_[j]) > epsi)  //如果dx>epsi 认为没有收敛
@@ -302,16 +329,15 @@ class esekf {
       }
 
       if (dyn_share.converge) t++;
-
-      if (!t && i == maximum_iter -
-                         2)  //如果迭代了3次还没收敛
-                             //强制令成true，h_share_model函数中会重新寻找近邻点
-      {
+      // note: 如果迭代了3次还没收敛，强制令成true
+      // h_share_model函数中会重新寻找近邻点
+      if (!t && i == maximum_iter - 2) {
         dyn_share.converge = true;
       }
 
+      // step: 4.4 公式(19)
       if (t > 1 || i == maximum_iter - 1) {
-        P_ = (Matrix<double, 24, 24>::Identity() - KH) * P_;  //公式(19)
+        P_ = (Matrix<double, 24, 24>::Identity() - KH) * P_;
         return;
       }
     }

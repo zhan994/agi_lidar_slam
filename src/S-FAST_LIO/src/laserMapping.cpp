@@ -302,12 +302,16 @@ void pointBodyToWorld(const Matrix<T, 3, 1>& pi, Matrix<T, 3, 1>& po) {
 
 BoxPointType LocalMap_Points;       // ikd-tree地图立方体的2个角点
 bool Localmap_Initialized = false;  // 局部地图是否初始化
+/**
+ * \brief // api: 更新地图边界
+ *
+ */
 void lasermap_fov_segment() {
   cub_needrm.clear();  // 清空需要移除的区域
   kdtree_delete_counter = 0;
 
   V3D pos_LiD = pos_lid;  // W系下位置
-  //初始化局部地图范围，以pos_LiD为中心,长宽高均为cube_len
+  // step: 1 初始化局部地图范围，以pos_LiD为中心,长宽高均为cube_len
   if (!Localmap_Initialized) {
     for (int i = 0; i < 3; i++) {
       LocalMap_Points.vertex_min[i] = pos_LiD(i) - cube_len / 2.0;
@@ -317,13 +321,14 @@ void lasermap_fov_segment() {
     return;
   }
 
-  //各个方向上pos_LiD与局部地图边界的距离
+  // step: 2 各个方向上pos_LiD与局部地图边界的距离
   float dist_to_map_edge[3][2];
   bool need_move = false;
   for (int i = 0; i < 3; i++) {
     dist_to_map_edge[i][0] = fabs(pos_LiD(i) - LocalMap_Points.vertex_min[i]);
     dist_to_map_edge[i][1] = fabs(pos_LiD(i) - LocalMap_Points.vertex_max[i]);
-    // 与某个方向上的边界距离（1.5*300m）太小，标记需要移除need_move(FAST-LIO2论文Fig.3)
+    // note: 与某个方向上的边界距离（1.5*300m）太小，标记需要移除need_move
+    // FAST-LIO2论文Fig.3
     if (dist_to_map_edge[i][0] <= MOV_THRESHOLD * DET_RANGE ||
         dist_to_map_edge[i][1] <= MOV_THRESHOLD * DET_RANGE)
       need_move = true;
@@ -332,7 +337,7 @@ void lasermap_fov_segment() {
 
   BoxPointType New_LocalMap_Points, tmp_boxpoints;
   New_LocalMap_Points = LocalMap_Points;
-  //需要移动的距离
+  // step: 3 需要移动的距离，并更新新的地图
   float mov_dist = max((cube_len - 2.0 * MOV_THRESHOLD * DET_RANGE) * 0.5 * 0.9,
                        double(DET_RANGE * (MOV_THRESHOLD - 1)));
   for (int i = 0; i < 3; i++) {
@@ -351,9 +356,9 @@ void lasermap_fov_segment() {
   }
   LocalMap_Points = New_LocalMap_Points;
 
+  // step: 4 ikdtree删除旧地图边界
   PointVector points_history;
   ikdtree.acquire_removed_points(points_history);
-
   if (cub_needrm.size() > 0)
     kdtree_delete_counter =
         ikdtree.Delete_Point_Boxes(cub_needrm);  //删除指定范围内的点
@@ -370,22 +375,24 @@ void RGBpointBodyLidarToIMU(PointType const* const pi, PointType* const po) {
   po->intensity = pi->intensity;
 }
 
-//根据最新估计位姿  增量添加点云到map
+/**
+ * \brief // api: 根据最新估计位姿  增量添加点云到map
+ *
+ */
 void map_incremental() {
   PointVector PointToAdd;
   PointVector PointNoNeedDownsample;
   PointToAdd.reserve(feats_down_size);
   PointNoNeedDownsample.reserve(feats_down_size);
   for (int i = 0; i < feats_down_size; i++) {
-    //转换到世界坐标系
+    // 转换到世界坐标系
     pointBodyToWorld(&(feats_down_body->points[i]),
                      &(feats_down_world->points[i]));
-
     if (!Nearest_Points[i].empty() && flg_EKF_inited) {
       const PointVector& points_near = Nearest_Points[i];
       bool need_add = true;
       BoxPointType Box_of_Point;
-      PointType mid_point;  //点所在体素的中心
+      PointType mid_point;  // 点所在体素的中心
       mid_point.x = floor(feats_down_world->points[i].x / filter_size_map_min) *
                         filter_size_map_min +
                     0.5 * filter_size_map_min;
@@ -396,19 +403,19 @@ void map_incremental() {
                         filter_size_map_min +
                     0.5 * filter_size_map_min;
       float dist = calc_dist(feats_down_world->points[i], mid_point);
+
+      // 如果距离最近的点都在体素外，则该点不需要Downsample
       if (fabs(points_near[0].x - mid_point.x) > 0.5 * filter_size_map_min &&
           fabs(points_near[0].y - mid_point.y) > 0.5 * filter_size_map_min &&
           fabs(points_near[0].z - mid_point.z) > 0.5 * filter_size_map_min) {
-        PointNoNeedDownsample.push_back(
-            feats_down_world->points
-                [i]);  //如果距离最近的点都在体素外，则该点不需要Downsample
+        PointNoNeedDownsample.push_back(feats_down_world->points[i]);
         continue;
       }
+
+      // 如果近邻点距离 < 当前点距离，不添加该点
       for (int j = 0; j < NUM_MATCH_POINTS; j++) {
         if (points_near.size() < NUM_MATCH_POINTS) break;
-        if (calc_dist(points_near[j], mid_point) <
-            dist)  //如果近邻点距离 < 当前点距离，不添加该点
-        {
+        if (calc_dist(points_near[j], mid_point) < dist) {
           need_add = false;
           break;
         }
@@ -503,6 +510,12 @@ void publish_map(const ros::Publisher& pubLaserCloudMap) {
   pubLaserCloudMap.publish(laserCloudMap);
 }
 
+/**
+ * \brief // api: 设置posestamp
+ *
+ * \tparam T
+ * \param out
+ */
 template <typename T>
 void set_posestamp(T& out) {
   out.pose.position.x = state_point.pos(0);
@@ -516,6 +529,11 @@ void set_posestamp(T& out) {
   out.pose.orientation.w = q_.coeffs()[3];
 }
 
+/**
+ * \brief // api: 发布里成计
+ *
+ * \param pubOdomAftMapped
+ */
 void publish_odometry(const ros::Publisher& pubOdomAftMapped) {
   odomAftMapped.header.frame_id = "camera_init";
   odomAftMapped.child_frame_id = "body";
@@ -549,6 +567,11 @@ void publish_odometry(const ros::Publisher& pubOdomAftMapped) {
                                         "camera_init", "body"));
 }
 
+/**
+ * \brief // api: 发布轨迹
+ *
+ * \param pubPath
+ */
 void publish_path(const ros::Publisher pubPath) {
   set_posestamp(msg_body_pose);
   msg_body_pose.header.stamp = ros::Time().fromSec(lidar_end_time);
