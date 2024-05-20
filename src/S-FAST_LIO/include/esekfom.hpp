@@ -195,6 +195,7 @@ class esekf {
     ekfom_data.h.resize(effct_feat_num);
 
     for (int i = 0; i < effct_feat_num; i++) {
+      // step: 3.1 计算body坐标系下的点坐标，以及相应的反对称矩阵
       V3D point_(laserCloudOri->points[i].x, laserCloudOri->points[i].y,
                  laserCloudOri->points[i].z);
       M3D point_crossmat;
@@ -203,12 +204,13 @@ class esekf {
       M3D point_I_crossmat;
       point_I_crossmat << SKEW_SYM_MATRX(point_I_);
 
-      // 得到对应的平面的法向量
+      // step: 3.2 得到对应的平面的法向量
       const PointType& norm_p = corr_normvect->points[i];
       V3D norm_vec(norm_p.x, norm_p.y, norm_p.z);
 
-      // 计算雅可比矩阵H
+      // step: 3.3 计算雅可比矩阵H
       V3D C(x_.rot.matrix().transpose() * norm_vec);
+      // note: (p^{\land})^T * R^T * n = -n^T * R * p^{\land}
       V3D A(point_I_crossmat * C);
       if (extrinsic_est) {
         V3D B(point_crossmat * x_.offset_R_L_I.matrix().transpose() * C);
@@ -219,7 +221,7 @@ class esekf {
             VEC_FROM_ARRAY(A), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
       }
 
-      // 残差：点面距离
+      // step: 3.4 残差：点面距离，注意外面不需要负号
       ekfom_data.h(i) = -norm_p.intensity;
     }
   }
